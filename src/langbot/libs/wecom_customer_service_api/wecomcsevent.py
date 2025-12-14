@@ -1,4 +1,5 @@
 from typing import Dict, Any, Optional
+import json
 
 
 class WecomCSEvent(dict):
@@ -99,6 +100,42 @@ class WecomCSEvent(dict):
             Optional[int]: 时间戳。
         """
         return self.get('send_time')
+
+    @property
+    def merged_msg(self) -> Optional[Dict[str, Any]]:
+        """
+        聊天记录消息，仅在 msgtype 为 merged_msg 时存在。
+
+        Returns:
+            Optional[Dict[str, Any]]: 聊天记录消息内容。
+        """
+        if self.get('msgtype') == 'merged_msg':
+            return self.get('merged_msg')
+        return None
+
+    @property
+    def merged_items(self) -> Optional[list]:
+        """
+        聊天记录消息中的具体条目列表，会自动解析 msg_content 字段。
+
+        Returns:
+            Optional[list]: 解析后的消息列表。
+        """
+        merged = self.merged_msg
+        if not merged:
+            return None
+        
+        items = merged.get('item', [])
+        parsed_items = []
+        for item in items:
+            new_item = item.copy()
+            if 'msg_content' in new_item:
+                try:
+                    new_item['msg_content'] = json.loads(new_item['msg_content'])
+                except json.JSONDecodeError:
+                    pass
+            parsed_items.append(new_item)
+        return parsed_items
 
     def __getattr__(self, key: str) -> Optional[Any]:
         """

@@ -115,6 +115,74 @@ class WecomEventConverter(abstract_platform_adapter.AbstractEventConverter):
             return platform_events.FriendMessage(
                 sender=friend, message_chain=yiri_chain, time=event.timestamp, source_platform_object=event
             )
+        elif event.type == 'merged_msg':
+            # 处理合并聊天记录
+            print(f"[DEBUG] 处理合并消息,原始数据: {event.merged_msg}")
+            items = event.merged_items or []
+            print(f"[DEBUG] 解析后的 items 数量: {len(items)}")
+            print(f"[DEBUG] items 内容: {items}")
+            content_parts = []
+            
+            # 添加标题
+            if event.merged_msg and event.merged_msg.get('title'):
+                content_parts.append(f"=== {event.merged_msg['title']} ===")
+            
+            # 提取每条消息的内容
+            for idx, item in enumerate(items):
+                print(f"[DEBUG] 处理第 {idx+1} 条消息,完整数据: {item}")
+                
+                # msg_content 已经被 merged_items 属性解析为字典
+                msg_content = item.get('msg_content', {})
+                msg_type = msg_content.get('msgtype', '') if isinstance(msg_content, dict) else ''
+                
+                print(f"[DEBUG] msg_content: {msg_content}, msgtype: {msg_type}")
+                
+                if msg_type == 'text':
+                    # 文本消息:从 msg_content.text.content 提取内容
+                    text_obj = msg_content.get('text', {})
+                    content = text_obj.get('content', '') if isinstance(text_obj, dict) else ''
+                    if content:
+                        content_parts.append(content)
+                        print(f"[DEBUG] 提取到文本内容: {content}")
+                elif msg_type == 'image':
+                    # 图片消息:显示标识
+                    content_parts.append('[图片]')
+                elif msg_type == 'file':
+                    # 文件消息:显示文件名
+                    file_obj = msg_content.get('file', {})
+                    filename = file_obj.get('filename', '文件') if isinstance(file_obj, dict) else '文件'
+                    content_parts.append(f'[文件: {filename}]')
+                elif msg_type == 'voice':
+                    # 语音消息:显示标识
+                    content_parts.append('[语音]')
+                elif msg_type == 'video':
+                    # 视频消息:显示标识
+                    content_parts.append('[视频]')
+                elif msg_type:
+                    # 其他已知类型:显示类型
+                    content_parts.append(f'[{msg_type}]')
+                else:
+                    # 未知类型:尝试直接显示 item 的字符串表示
+                    print(f"[DEBUG] 未知消息类型,item 完整内容: {item}")
+            
+            # 合并所有内容
+            merged_content = '\n'.join(content_parts)
+            print(f"[DEBUG] 最终合并内容: {merged_content}")
+            print(f"[DEBUG] 合并内容长度: {len(merged_content)}")
+            
+            # 创建消息链
+            yiri_chain = await WecomMessageConverter.target2yiri(merged_content, event.message_id)
+            
+            # 创建 Friend 对象
+            friend = platform_entities.Friend(
+                id=f'u{event.user_id}',
+                nickname=str(event.user_id),
+                remark='',
+            )
+            
+            return platform_events.FriendMessage(
+                sender=friend, message_chain=yiri_chain, time=event.timestamp, source_platform_object=event
+            )
 
 
 class WecomCSAdapter(abstract_platform_adapter.AbstractMessagePlatformAdapter):
@@ -193,6 +261,7 @@ class WecomCSAdapter(abstract_platform_adapter.AbstractMessagePlatformAdapter):
         if event_type == platform_events.FriendMessage:
             self.bot.on_message('text')(on_message)
             self.bot.on_message('image')(on_message)
+            self.bot.on_message('merged_msg')(on_message)  # 添加合并消息支持
         elif event_type == platform_events.GroupMessage:
             pass
 

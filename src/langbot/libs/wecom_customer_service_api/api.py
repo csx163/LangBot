@@ -106,7 +106,11 @@ class WecomCSClient:
             if data['errcode'] != 0:
                 raise Exception('Failed to get message')
 
+            print(f"[DEBUG] API 返回数据: {data}")
+            print(f"[DEBUG] 消息列表长度: {len(data.get('msg_list', []))}")
+            
             last_msg_data = data['msg_list'][-1]
+            print(f"[DEBUG] 最后一条消息: {last_msg_data}")
             open_kfid = last_msg_data.get('open_kfid')
             # 进行获取图片操作
             if last_msg_data.get('msgtype') == 'image':
@@ -235,13 +239,18 @@ class WecomCSClient:
                 return reply_echo_str
 
             elif req.method == 'POST':
+                print(f"\n[DEBUG] 收到 POST 请求")
                 encrypt_msg = await req.data
+                print(f"[DEBUG] 加密消息长度: {len(encrypt_msg)}")
                 ret, xml_msg = wxcpt.DecryptMsg(encrypt_msg, msg_signature, timestamp, nonce)
+                print(f"[DEBUG] 解密结果 ret={ret}")
                 if ret != 0:
-                    raise Exception(f'消息解密失败，错误码: {ret}')
+                    raise Exception(f'消息解密失败,错误码: {ret}')
 
                 # 解析消息并处理
+                print(f"[DEBUG] 开始调用 get_detailed_message_list")
                 message_data = await self.get_detailed_message_list(xml_msg)
+                print(f"[DEBUG] 返回的消息数据: {message_data}")
                 if message_data is not None:
                     event = WecomCSEvent.from_payload(message_data)
                     if event:
