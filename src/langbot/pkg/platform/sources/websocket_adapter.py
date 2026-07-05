@@ -37,15 +37,23 @@ class WebSocketSession:
     id: str
     message_lists: dict[str, list[WebSocketMessage]] = {}
     """消息列表 {pipeline_uuid: [messages]}"""
+    stream_message_indexes: dict[str, dict[str, int]] = {}
+    """流式消息索引 {pipeline_uuid: {resp_message_id: message_index}}"""
 
     def __init__(self, id: str):
         self.id = id
         self.message_lists = {}
+        self.stream_message_indexes = {}
 
     def get_message_list(self, pipeline_uuid: str) -> list[WebSocketMessage]:
         if pipeline_uuid not in self.message_lists:
             self.message_lists[pipeline_uuid] = []
         return self.message_lists[pipeline_uuid]
+
+    def get_stream_message_indexes(self, pipeline_uuid: str) -> dict[str, int]:
+        if pipeline_uuid not in self.stream_message_indexes:
+            self.stream_message_indexes[pipeline_uuid] = {}
+        return self.stream_message_indexes[pipeline_uuid]
 
 
 class WebSocketAdapter(abstract_platform_adapter.AbstractMessagePlatformAdapter):
@@ -89,20 +97,46 @@ class WebSocketAdapter(abstract_platform_adapter.AbstractMessagePlatformAdapter)
         target_id: str,
         message: platform_message.MessageChain,
     ) -> dict:
-        """发送消息 - 这里用于主动推送消息到前端"""
-        message_data = {
-            'type': 'bot_message',
-            'target_type': target_type,
-            'target_id': target_id,
-            'content': str(message),
-            'message_chain': [component.__dict__ for component in message],
-            'timestamp': datetime.now().isoformat(),
-        }
+        """发送消息 - 这里用于主动推送消息到前端
 
-        # 推送到所有相关连接
-        await self.outbound_message_queue.put(message_data)
+        对于 WebSocket 适配器，我们需要将消息广播到正确的 pipeline 连接。
+        target_id 可能是 launcher_id（如 websocket_xxx）或 pipeline_uuid。
+        我们需要尝试两种方式来确保消息能够送达。
+        """
+        # 获取当前的 pipeline_uuid
+        pipeline_uuid = self.ap.platform_mgr.websocket_proxy_bot.bot_entity.use_pipeline_uuid
+        session_type = 'group' if target_type == 'group' else 'person'
 
-        return message_data
+        # 选择会话
+        session = self.websocket_group_session if session_type == 'group' else self.websocket_person_session
+
+        # 生成唯一消息ID
+        msg_id = len(session.get_message_list(pipeline_uuid)) + 1
+
+        message_data = WebSocketMessage(
+            id=msg_id,
+            role='assistant',
+            content=str(message),
+            message_chain=[component.__dict__ for component in message],
+            timestamp=datetime.now().isoformat(),
+            is_final=True,
+        )
+
+        # 保存到历史记录
+        session.get_message_list(pipeline_uuid).append(message_data)
+
+        # 直接广播到当前pipeline的连接
+        await ws_connection_manager.broadcast_to_pipeline(
+            pipeline_uuid,
+            {
+                'type': 'response',
+                'session_type': session_type,
+                'data': message_data.model_dump(),
+            },
+            session_type=session_type,
+        )
+
+        return message_data.model_dump()
 
     async def reply_message(
         self,
@@ -169,10 +203,16 @@ class WebSocketAdapter(abstract_platform_adapter.AbstractMessagePlatformAdapter)
         pipeline_uuid = self.ap.platform_mgr.websocket_proxy_bot.bot_entity.use_pipeline_uuid
         session_type = 'group' if isinstance(message_source, platform_events.GroupMessage) else 'person'
         message_list = session.get_message_list(pipeline_uuid)
+        stream_message_indexes = session.get_stream_message_indexes(pipeline_uuid)
 
-        # 检查是否是新的流式消息（通过bot_message对象判断）
-        # 如果列表为空，或者最后一条消息已经is_final=True，则创建新消息
-        if not message_list or message_list[-1].is_final:
+        # Streaming messages in LangBot have a stable resp_message_id during the same assistant reply.
+        # Use it as the primary key to avoid overwriting an old card from a previous reply.
+        resp_message_id = str(getattr(bot_message, 'resp_message_id', '') or '')
+        existing_index = stream_message_indexes.get(resp_message_id) if resp_message_id else None
+
+        message_is_final = is_final and bot_message.tool_calls is None
+
+        if existing_index is None or existing_index >= len(message_list):
             # 创建新消息
             msg_id = len(message_list) + 1
             message_data = WebSocketMessage(
@@ -181,27 +221,31 @@ class WebSocketAdapter(abstract_platform_adapter.AbstractMessagePlatformAdapter)
                 content=str(message),
                 message_chain=[component.__dict__ for component in message],
                 timestamp=datetime.now().isoformat(),
-                is_final=is_final and bot_message.tool_calls is None,
+                is_final=message_is_final,
             )
 
-            # 只有在is_final时才保存到历史记录
-            if is_final and bot_message.tool_calls is None:
-                message_list.append(message_data)
+            # 立即添加到历史记录（即使is_final=False），以便后续块可以更新它
+            message_list.append(message_data)
+            if resp_message_id:
+                stream_message_indexes[resp_message_id] = len(message_list) - 1
         else:
-            # 更新最后一条消息
-            msg_id = message_list[-1].id
+            # 更新同一条流式消息
+            old_message = message_list[existing_index]
+            msg_id = old_message.id
             message_data = WebSocketMessage(
                 id=msg_id,
                 role='assistant',
                 content=str(message),
                 message_chain=[component.__dict__ for component in message],
-                timestamp=message_list[-1].timestamp,  # 保持原始时间戳
-                is_final=is_final and bot_message.tool_calls is None,
+                timestamp=old_message.timestamp,  # 保持原始时间戳
+                is_final=message_is_final,
             )
 
-            # 如果是final，更新历史记录中的最后一条
-            if is_final and bot_message.tool_calls is None:
-                message_list[-1] = message_data
+            # 更新历史记录中的对应消息
+            message_list[existing_index] = message_data
+
+        if message_is_final and resp_message_id:
+            stream_message_indexes.pop(resp_message_id, None)
 
         # 直接广播到所有该pipeline的连接，包含session_type信息
         await ws_connection_manager.broadcast_to_pipeline(
@@ -268,48 +312,58 @@ class WebSocketAdapter(abstract_platform_adapter.AbstractMessagePlatformAdapter)
 
     async def _process_image_components(self, message_chain_obj: list):
         """
-        处理消息链中的图片组件，将path转换为base64
+        处理消息链中的图片、语音和文件组件，将 path 转换为 base64
+
+        Image / Voice / File components uploaded from the web client carry a
+        storage key in ``path``. Resolve it to a base64 data URI so downstream
+        stages (multimodal LLM input and the Box sandbox inbox) have a usable
+        payload, then drop the now-consumed storage object.
 
         Args:
             message_chain_obj: 消息链对象列表
         """
         import base64
+        import mimetypes
 
         storage_mgr = self.ap.storage_mgr
 
         for component in message_chain_obj:
-            if component.get('type') == 'Image' and component.get('path'):
-                try:
-                    # 从storage读取文件
-                    file_content = await storage_mgr.storage_provider.load(component['path'])
+            comp_type = component.get('type', '')
+            comp_path = component.get('path', '')
 
-                    # 转换为base64
-                    base64_str = base64.b64encode(file_content).decode('utf-8')
+            if not comp_path or comp_type not in ('Image', 'Voice', 'File'):
+                continue
 
-                    # 添加data URI前缀（根据文件扩展名判断MIME类型）
-                    file_key = component['path']
-                    if file_key.lower().endswith(('.jpg', '.jpeg')):
+            try:
+                file_content = await storage_mgr.storage_provider.load(comp_path)
+                base64_str = base64.b64encode(file_content).decode('utf-8')
+
+                lowered = comp_path.lower()
+                if comp_type == 'Image':
+                    if lowered.endswith(('.jpg', '.jpeg')):
                         mime_type = 'image/jpeg'
-                    elif file_key.lower().endswith('.png'):
-                        mime_type = 'image/png'
-                    elif file_key.lower().endswith('.gif'):
+                    elif lowered.endswith('.gif'):
                         mime_type = 'image/gif'
-                    elif file_key.lower().endswith('.webp'):
+                    elif lowered.endswith('.webp'):
                         mime_type = 'image/webp'
                     else:
-                        mime_type = 'image/png'  # 默认
+                        mime_type = 'image/png'
+                elif comp_type == 'Voice':
+                    mime_type = mimetypes.guess_type(comp_path)[0] or 'audio/wav'
+                else:  # File
+                    mime_type = mimetypes.guess_type(comp_path)[0] or 'application/octet-stream'
 
-                    component['base64'] = f'data:{mime_type};base64,{base64_str}'
-                    await storage_mgr.storage_provider.delete(component['path'])
-                    component['path'] = ''
-                    # 保留path字段用于后端处理，前端使用base64显示
-                except Exception as e:
-                    await self.logger.error(f'加载图片文件失败 {component["path"]}: {e}')
+                component['base64'] = f'data:{mime_type};base64,{base64_str}'
+                await storage_mgr.storage_provider.delete(comp_path)
+                component['path'] = ''
+            except Exception as e:
+                await self.logger.error(f'Failed to load {comp_type} file {comp_path}: {e}')
 
     async def handle_websocket_message(
         self,
         connection: WebSocketConnection,
         message_data: dict,
+        owner_bot=None,
     ):
         """
         处理从WebSocket接收的消息
@@ -322,6 +376,8 @@ class WebSocketAdapter(abstract_platform_adapter.AbstractMessagePlatformAdapter)
             message_data: 消息数据，包含:
                 - message: 消息链
                 - stream: 是否启用流式输出 (可选，默认True)
+            owner_bot: Optional RuntimeBot that owns this pipeline (e.g. a web_page_bot).
+                       When provided, its identity is used for logging and session tracking.
         """
         pipeline_uuid = connection.pipeline_uuid
         session_type = connection.session_type
@@ -391,12 +447,26 @@ class WebSocketAdapter(abstract_platform_adapter.AbstractMessagePlatformAdapter)
                 sender=sender, message_chain=message_chain, time=datetime.now().timestamp()
             )
 
-        # 设置流水线UUID
+        # 设置流水线UUID (proxy bot always needs it for reply_message routing)
         self.ap.platform_mgr.websocket_proxy_bot.bot_entity.use_pipeline_uuid = pipeline_uuid
+        if owner_bot is not None:
+            owner_bot.bot_entity.use_pipeline_uuid = pipeline_uuid
 
-        # 异步触发事件处理（不等待结果）
-        if event.__class__ in self.listeners:
-            asyncio.create_task(self.listeners[event.__class__](event, self))
+        # 异步触发事件处理
+        # Use owner_bot's listeners if available, otherwise fall back to proxy bot
+        listeners = (
+            owner_bot.adapter.listeners
+            if (owner_bot and hasattr(owner_bot.adapter, 'listeners') and owner_bot.adapter.listeners)
+            else self.listeners
+        )
+        # Pass owner_bot's adapter so that downstream logging / dashboard
+        # attributes the message to the correct bot adapter name.
+        # Wire the ws adapter into the owner so replies are actually delivered.
+        if owner_bot and hasattr(owner_bot.adapter, 'set_ws_adapter'):
+            owner_bot.adapter.set_ws_adapter(self)
+        callback_adapter = owner_bot.adapter if (owner_bot and hasattr(owner_bot, 'adapter')) else self
+        if event.__class__ in listeners:
+            asyncio.create_task(listeners[event.__class__](event, callback_adapter))
 
     def get_websocket_messages(self, pipeline_uuid: str, session_type: str) -> list[dict]:
         """获取消息历史"""
@@ -410,6 +480,10 @@ class WebSocketAdapter(abstract_platform_adapter.AbstractMessagePlatformAdapter)
         if session_type == 'person':
             if pipeline_uuid in self.websocket_person_session.message_lists:
                 self.websocket_person_session.message_lists[pipeline_uuid] = []
+            if pipeline_uuid in self.websocket_person_session.stream_message_indexes:
+                self.websocket_person_session.stream_message_indexes[pipeline_uuid] = {}
         else:
             if pipeline_uuid in self.websocket_group_session.message_lists:
                 self.websocket_group_session.message_lists[pipeline_uuid] = []
+            if pipeline_uuid in self.websocket_group_session.stream_message_indexes:
+                self.websocket_group_session.stream_message_indexes[pipeline_uuid] = {}

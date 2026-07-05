@@ -3,17 +3,22 @@ from __future__ import annotations
 import uuid
 import typing
 import traceback
+import time
+from datetime import datetime
 
 
 from .. import handler
 from ... import entities
+from ... import plugin_diagnostics
 from ....provider import runner as runner_module
 
 import langbot_plugin.api.entities.events as events
-from ....utils import importutil
+from ....utils import importutil, constants, runner as runner_utils
+from ....telemetry import features as telemetry_features
 from ....provider import runners
 import langbot_plugin.api.entities.builtin.provider.session as provider_session
 import langbot_plugin.api.entities.builtin.pipeline.query as pipeline_query
+import langbot_plugin.api.entities.builtin.provider.message as provider_message
 
 
 importutil.import_modules_in_pkg(runners)
@@ -54,15 +59,31 @@ class ChatMessageHandler(handler.MessageHandler):
         if event_ctx.is_prevented_default():
             if event_ctx.event.reply_message_chain is not None:
                 mc = event_ctx.event.reply_message_chain
+                plugin_diagnostics.record_pending_plugin_response_source(
+                    query,
+                    mc,
+                    plugin_diagnostics.get_response_sources(event_ctx),
+                    plugin_diagnostics.get_emitted_plugins(event_ctx),
+                    event.event_name,
+                )
                 query.resp_messages.append(mc)
 
                 yield entities.StageProcessResult(result_type=entities.ResultType.CONTINUE, new_query=query)
             else:
+                self.ap.logger.debug(
+                    f'NormalMessageReceived event prevented default for query {query.query_id} without reply'
+                )
                 yield entities.StageProcessResult(result_type=entities.ResultType.INTERRUPT, new_query=query)
         else:
             if event_ctx.event.user_message_alter is not None:
-                # if isinstance(event_ctx.event, str):  # 现在暂时不考虑多模态alter
-                query.user_message.content = event_ctx.event.user_message_alter
+                if isinstance(event_ctx.event.user_message_alter, list):
+                    query.user_message.content = event_ctx.event.user_message_alter
+                elif isinstance(event_ctx.event.user_message_alter, str):
+                    query.user_message.content = [
+                        provider_message.ContentElement.from_text(event_ctx.event.user_message_alter)
+                    ]
+                elif isinstance(event_ctx.event.user_message_alter, provider_message.ContentElement):
+                    query.user_message.content = [event_ctx.event.user_message_alter]
 
             text_length = 0
             try:
@@ -77,8 +98,12 @@ class ChatMessageHandler(handler.MessageHandler):
                         break
                 else:
                     raise ValueError(f'Request Runner not found: {query.pipeline_config["ai"]["runner"]["runner"]}')
+                # Mark start time for telemetry
+                start_ts = time.time()
+
                 if is_stream:
                     resp_message_id = uuid.uuid4()
+                    chunk_count = 0  # Track streaming chunks to reduce excessive logging
 
                     async for result in runner.run(query):
                         result.resp_message_id = str(resp_message_id)
@@ -91,22 +116,39 @@ class ChatMessageHandler(handler.MessageHandler):
                             await query.adapter.create_message_card(str(resp_message_id), query.message_event)
                             is_create_card = True
                         query.resp_messages.append(result)
-                        self.ap.logger.info(
-                            f'Conversation({query.query_id}) Streaming Response: {self.cut_str(result.readable_str())}'
-                        )
+
+                        chunk_count += 1
+                        # Only log every 10th chunk to reduce excessive logging during streaming
+                        # This prevents memory overflow from thousands of log entries per conversation
+                        # First chunk uses INFO level to confirm connection establishment
+                        if chunk_count == 1:
+                            summary = self.format_result_log(result)
+                            if summary is not None:
+                                self.ap.logger.info(f'Conversation({query.query_id}) Streaming started: {summary}')
+                            else:
+                                self.ap.logger.info(f'Conversation({query.query_id}) Streaming started')
+                        elif chunk_count % 10 == 0:
+                            self.ap.logger.debug(
+                                f'Conversation({query.query_id}) Streaming chunk {chunk_count}: {self.cut_str(result.readable_str())}'
+                            )
 
                         if result.content is not None:
                             text_length += len(result.content)
 
                         yield entities.StageProcessResult(result_type=entities.ResultType.CONTINUE, new_query=query)
 
+                    # Log final summary after streaming completes
+                    self.ap.logger.info(
+                        f'Conversation({query.query_id}) Streaming completed: {chunk_count} chunks, {text_length} chars'
+                    )
+
                 else:
                     async for result in runner.run(query):
                         query.resp_messages.append(result)
 
-                        self.ap.logger.info(
-                            f'Conversation({query.query_id}) Response: {self.cut_str(result.readable_str())}'
-                        )
+                        summary = self.format_result_log(result)
+                        if summary is not None:
+                            self.ap.logger.info(f'Conversation({query.query_id}) Response: {summary}')
 
                         if result.content is not None:
                             text_length += len(result.content)
@@ -117,18 +159,87 @@ class ChatMessageHandler(handler.MessageHandler):
 
                 query.session.using_conversation.messages.extend(query.resp_messages)
             except Exception as e:
-                self.ap.logger.error(f'Conversation({query.query_id}) Request Failed: {type(e).__name__} {str(e)}')
+                error_info = f'{traceback.format_exc()}'
+                self.ap.logger.error(f'Conversation({query.query_id}) Request Failed: {error_info}')
                 traceback.print_exc()
 
-                hide_exception_info = query.pipeline_config['output']['misc']['hide-exception']
+                exception_handling = query.pipeline_config['output']['misc'].get('exception-handling', 'show-hint')
+
+                if exception_handling == 'show-error':
+                    user_notice = f'{e}'
+                elif exception_handling == 'show-hint':
+                    user_notice = query.pipeline_config['output']['misc'].get('failure-hint', 'Request failed.')
+                else:  # hide
+                    user_notice = None
 
                 yield entities.StageProcessResult(
                     result_type=entities.ResultType.INTERRUPT,
                     new_query=query,
-                    user_notice='请求失败' if hide_exception_info else f'{e}',
+                    user_notice=user_notice,
                     error_notice=f'{e}',
                     debug_notice=traceback.format_exc(),
                 )
             finally:
-                # TODO statistics
-                pass
+                # Telemetry reporting: collect minimal per-query execution info and send asynchronously
+                try:
+                    end_ts = time.time()
+                    duration_ms = None
+                    if 'start_ts' in locals():
+                        duration_ms = int((end_ts - start_ts) * 1000)
+
+                    adapter_name = query.adapter.__class__.__name__ if hasattr(query, 'adapter') else None
+                    runner_name = (
+                        query.pipeline_config.get('ai', {}).get('runner', {}).get('runner')
+                        if query.pipeline_config
+                        else None
+                    )
+
+                    # Model name if using localagent
+                    model_name = None
+                    try:
+                        if runner_name == 'local-agent' and getattr(query, 'use_llm_model_uuid', None):
+                            m = await self.ap.model_mgr.get_model_by_uuid(query.use_llm_model_uuid)
+                            if m and getattr(m, 'model_entity', None):
+                                model_name = getattr(m.model_entity, 'name', None)
+                    except Exception:
+                        model_name = None
+
+                    pipeline_plugins = query.variables.get('_pipeline_bound_plugins', None)
+
+                    runner_category = runner_utils.get_runner_category_from_runner(
+                        runner_name, runner, query.pipeline_config
+                    )
+
+                    # Feature usage collected during query processing (tool calls,
+                    # knowledge base usage, sandbox executions, activated skills, ...)
+                    features = telemetry_features.collect_features(query)
+
+                    payload = {
+                        'event_type': 'query',
+                        'query_id': query.query_id,
+                        'adapter': adapter_name,
+                        'runner': runner_name,
+                        'runner_category': runner_category,
+                        'duration_ms': duration_ms,
+                        'model_name': model_name,
+                        'version': constants.semantic_version,
+                        'instance_id': constants.instance_id,
+                        'edition': constants.edition,
+                        'pipeline_plugins': pipeline_plugins,
+                        'features': features,
+                        'error': locals().get('error_info', None),
+                        'timestamp': datetime.utcnow().isoformat(),
+                    }
+
+                    # Send telemetry asynchronously and do not block pipeline via app's telemetry manager
+                    await self.ap.telemetry.start_send_task(payload)
+
+                    # Trigger survey events on successful non-WebSocket responses
+                    if not locals().get('error_info') and adapter_name and 'WebSocket' not in adapter_name:
+                        if self.ap.survey:
+                            await self.ap.survey.trigger_event('first_bot_response_success')
+                            # Counts toward the bot_response_success_100 milestone event
+                            await self.ap.survey.record_bot_response_success()
+                except Exception as ex:
+                    # Ensure telemetry issues do not affect normal flow
+                    self.ap.logger.warning(f'Failed to send telemetry: {ex}')

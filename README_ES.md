@@ -1,147 +1,196 @@
 <p align="center">
 <a href="https://langbot.app">
-<img width="130" src="https://docs.langbot.app/langbot-logo.png" alt="LangBot"/>
+<img width="130" src="res/logo-blue.png" alt="LangBot"/>
 </a>
 
 <div align="center">
 
-<a href="https://www.producthunt.com/products/langbot?utm_source=badge-follow&utm_medium=badge&utm_source=badge-langbot" target="_blank"><img src="https://api.producthunt.com/widgets/embed-image/v1/follow.svg?product_id=1077185&theme=light" alt="LangBot - Production&#0045;grade&#0032;IM&#0032;bot&#0032;made&#0032;easy&#0046; | Product Hunt" style="width: 250px; height: 54px;" width="250" height="54" /></a>
+<a href="https://www.producthunt.com/products/langbot/launches/langbot?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-langbot" target="_blank" rel="noopener noreferrer"><img alt="LangBot - Easy-to-use global IM bot platform designed for the LLM era | Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=979554&amp;theme=light&amp;t=1782822143403"></a>
 
-<h3>Cree, depure y despliegue bots de mensajería instantánea rápidamente con LangBot.</h3>
+<h3>Plataforma de grado de producción para construir bots de mensajería instantánea con agentes de IA.</h3>
+<h4>Construya, depure y despliegue bots de IA rápidamente en Slack, Discord, Telegram, WeChat y más.</h4>
 
-[English](README_EN.md) / [简体中文](README.md) / [繁體中文](README_TW.md) / [日本語](README_JP.md) / Español / [Français](README_FR.md) / [한국어](README_KO.md) / [Русский](README_RU.md) / [Tiếng Việt](README_VI.md)
+[English](README.md) / [简体中文](README_CN.md) / [繁體中文](README_TW.md) / [日本語](README_JP.md) / Español / [Français](README_FR.md) / [한국어](README_KO.md) / [Русский](README_RU.md) / [Tiếng Việt](README_VI.md)
 
 [![Discord](https://img.shields.io/discord/1335141740050649118?logo=discord&labelColor=%20%235462eb&logoColor=%20%23f5f5f5&color=%20%235462eb)](https://discord.gg/wdNEHETs87)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/langbot-app/LangBot)
 [![GitHub release (latest by date)](https://img.shields.io/github/v/release/langbot-app/LangBot)](https://github.com/langbot-app/LangBot/releases/latest)
 <img src="https://img.shields.io/badge/python-3.10 ~ 3.13 -blue.svg" alt="python">
+[![GitHub stars](https://img.shields.io/github/stars/langbot-app/LangBot?style=social)](https://github.com/langbot-app/LangBot/stargazers)
 
 <a href="https://langbot.app">Inicio</a> ｜
-<a href="https://docs.langbot.app/en/insight/guide.html">Despliegue</a> ｜
-<a href="https://docs.langbot.app/en/plugin/plugin-intro.html">Plugin</a> ｜
-<a href="https://github.com/langbot-app/LangBot/issues/new?assignees=&labels=%E7%8B%AC%E7%AB%8B%E6%8F%92%E4%BB%B6&projects=&template=submit-plugin.yml&title=%5BPlugin%5D%3A+%E8%AF%B7%E6%B1%82%E7%99%BB%E8%AE%B0%E6%96%B0%E6%8F%92%E4%BB%B6">Enviar Plugin</a>
+<a href="https://link.langbot.app/en/docs/features">Características</a> ｜
+<a href="https://link.langbot.app/en/docs/guide">Documentación</a> ｜
+<a href="https://link.langbot.app/en/docs/api">API</a> ｜
+<a href="https://space.langbot.app">Mercado de Plugins</a> ｜
+<a href="https://langbot.featurebase.app/roadmap">Hoja de Ruta</a>
 
 </div>
 
 </p>
 
+---
 
-## 📦 Comenzar
+## ¿Qué es LangBot?
 
-#### Inicio Rápido
+LangBot es una **plataforma de código abierto y grado de producción** para construir bots de mensajería instantánea impulsados por IA. Conecta modelos de lenguaje de gran escala (LLMs) con cualquier plataforma de chat, permitiéndole crear agentes inteligentes que pueden conversar, ejecutar tareas e integrarse con sus flujos de trabajo existentes.
 
-Use `uvx` para iniciar con un comando (necesita instalar [uv](https://docs.astral.sh/uv/getting-started/installation/)):
+<p align="center">
+<img src="res/dashboard-overview.png" alt="Panel de gestión web de LangBot — monitoreo en tiempo real de volumen de mensajes, llamadas a modelos, tasa de éxito y sesiones activas" width="720"/>
+</p>
 
-```bash
-uvx langbot
-```
+### Capacidades Clave
 
-Visite http://localhost:5300 para comenzar a usarlo.
+- **Conversaciones e Agentes IA** — Diálogos de múltiples turnos, llamadas a herramientas, soporte multimodal, salida en streaming. RAG (base de conocimientos) incorporado con integración profunda con [Dify](https://dify.ai), [Coze](https://coze.com), [n8n](https://n8n.io), [Langflow](https://langflow.org), [Deerflow](https://deerflow.tech)、[Weknora](https://weknora.weixin.qq.com).
+- **Soporte Universal de Plataformas de MI** — Un solo código base para Discord, Telegram, Slack, LINE, QQ, WeChat, WeCom, Lark, DingTalk, KOOK.
+- **Listo para Producción** — Control de acceso, limitación de velocidad, filtrado de palabras sensibles, monitoreo completo y manejo de excepciones. De confianza para empresas.
+- **Ecosistema de Plugins** — Cientos de plugins, arquitectura basada en eventos, extensiones de componentes y soporte del [protocolo MCP](https://modelcontextprotocol.io/).
+- **Panel de Gestión Web** — Configure, gestione y monitoree sus bots a través de una interfaz de navegador intuitiva. Sin necesidad de editar YAML.
+- **Arquitectura Multi-Pipeline** — Diferentes bots para diferentes escenarios, con monitoreo completo y manejo de excepciones.
 
-#### Despliegue con Docker Compose
+[→ Conocer más sobre todas las funcionalidades](https://link.langbot.app/en/docs/features)
 
-```bash
-git clone https://github.com/langbot-app/LangBot
-cd LangBot/docker
-docker compose up -d
-```
+📍 Guías prácticas: [desplegar un bot de IA multiplataforma en 5 minutos](https://blog.langbot.app/en/blog/deploy-ai-bot-in-5-minutes/), [conectar DeepSeek a WeChat, Discord y Telegram](https://blog.langbot.app/en/blog/connect-deepseek-to-wechat/), [ejecutar un Dify Agent en Discord, Telegram y Slack](https://blog.langbot.app/en/blog/dify-agent-discord-telegram-slack/) y [crear un chatbot con n8n](https://blog.langbot.app/en/blog/n8n-multi-platform-ai-chatbot/).
 
-Visite http://localhost:5300 para comenzar a usarlo.
-
-Documentación detallada [Despliegue con Docker](https://docs.langbot.app/en/deploy/langbot/docker.html).
-
-#### Despliegue con un clic en BTPanel
-
-LangBot ha sido listado en BTPanel. Si tiene BTPanel instalado, puede usar la [documentación](https://docs.langbot.app/en/deploy/langbot/one-click/bt.html) para usarlo.
-
-#### Despliegue en la Nube Zeabur
-
-Plantilla de Zeabur contribuida por la comunidad.
-
-[![Deploy on Zeabur](https://zeabur.com/button.svg)](https://zeabur.com/en-US/templates/ZKTBDH)
-
-#### Despliegue en la Nube Railway
-
-[![Deploy on Railway](https://railway.com/button.svg)](https://railway.app/template/yRrAyL?referralCode=vogKPF)
-
-#### Otros Métodos de Despliegue
-
-Use directamente la versión publicada para ejecutar, consulte la documentación de [Despliegue Manual](https://docs.langbot.app/en/deploy/langbot/manual.html).
-
-#### Despliegue en Kubernetes
-
-Consulte la documentación de [Despliegue en Kubernetes](./docker/README_K8S.md).
+---
 
 ## 😎 Manténgase Actualizado
 
 Haga clic en los botones Star y Watch en la esquina superior derecha del repositorio para obtener las últimas actualizaciones.
 
-![star gif](https://docs.langbot.app/star.gif)
+![star gif](https://langbot.app/star.gif)
 
-## ✨ Características
+## Inicio Rápido
 
-<img width="500" src="https://docs.langbot.app/ui/bot-page-en-rounded.png" />
+### ☁️ LangBot Cloud (Recomendado)
 
+**[LangBot Cloud](https://space.langbot.app/cloud)** — Sin despliegue, listo para usar.
 
-- 💬 Chat con LLM / Agent: Compatible con múltiples LLMs, adaptado para chats grupales y privados; Admite conversaciones de múltiples rondas, llamadas a herramientas, capacidades multimodales y de salida en streaming. Implementación RAG (base de conocimientos) incorporada, e integración profunda con [Dify](https://dify.ai), [Coze](https://coze.com), [n8n](https://n8n.io) etc. LLMOps platforms.
-- 🤖 Soporte Multiplataforma: Actualmente compatible con QQ, QQ Channel, WeCom, WeChat personal, Lark, DingTalk, Discord, Telegram, KOOK, Slack, LINE, etc.
-- 🛠️ Alta Estabilidad, Rico en Funciones: Control de acceso nativo, limitación de velocidad, filtrado de palabras sensibles, etc.; Fácil de usar, admite múltiples métodos de despliegue. Compatible con múltiples configuraciones de pipeline, diferentes bots para diferentes escenarios.
-- 🧩 Extensión de Plugin, Comunidad Activa: Sistema de plugin de alta estabilidad, alta seguridad de nivel de producción; Compatible con mecanismos de plugin impulsados por eventos, extensión de componentes, etc.; Integración del protocolo [MCP](https://modelcontextprotocol.io/) de Anthropic; Actualmente cuenta con cientos de plugins.
-- 😻 Interfaz Web: Admite la gestión de instancias de LangBot a través del navegador. No es necesario escribir archivos de configuración manualmente.
+### Lanzamiento en una línea
 
-Para especificaciones más detalladas, consulte la [documentación](https://docs.langbot.app/en/insight/features.html).
+```bash
+uvx langbot
+```
 
-O visite el entorno de demostración: https://demo.langbot.dev/
-  - Información de inicio de sesión: Correo electrónico: `demo@langbot.app` Contraseña: `langbot123456`
-  - Nota: Solo para demostración de WebUI, por favor no ingrese información confidencial en el entorno público.
+> Requiere [uv](https://docs.astral.sh/uv/getting-started/installation/). Visite http://localhost:5300 — listo.
 
-### Plataformas de Mensajería
+### Docker Compose
 
-| Plataforma | Estado | Observaciones |
-| --- | --- | --- |
-| Discord | ✅ |  |
-| Telegram | ✅ |  |
-| Slack | ✅ |  |
-| LINE | ✅ |  |
-| QQ Personal | ✅ |  |
-| QQ API Oficial | ✅ |  |
-| WeCom | ✅ |  |
-| WeComCS | ✅ |  |
-| WeCom AI Bot | ✅ |  |
-| WeChat Personal | ✅ |  |
-| Lark | ✅ |  |
-| DingTalk | ✅ |  |
-| KOOK | ✅ |  |
+```bash
+git clone https://github.com/langbot-app/LangBot
+cd LangBot/docker
+docker compose --profile all up -d
+```
 
-### LLMs
+### Despliegue en la Nube con un Clic
 
-| LLM | Estado | Observaciones |
-| --- | --- | --- |
-| [OpenAI](https://platform.openai.com/) | ✅ | Disponible para cualquier modelo con formato de interfaz OpenAI |
-| [DeepSeek](https://www.deepseek.com/) | ✅ |  |
-| [Moonshot](https://www.moonshot.cn/) | ✅ |  |
-| [Anthropic](https://www.anthropic.com/) | ✅ |  |
-| [xAI](https://x.ai/) | ✅ |  |
-| [Zhipu AI](https://open.bigmodel.cn/) | ✅ |  |
-| [CompShare](https://www.compshare.cn/?ytag=GPU_YY-gh_langbot) | ✅ | Plataforma de recursos LLM y GPU |
-| [PPIO](https://ppinfra.com/user/register?invited_by=QJKFYD&utm_source=github_langbot) | ✅ | Plataforma de recursos LLM y GPU |
-| [接口 AI](https://jiekou.ai/) | ✅ | Plataforma de agregación LLM |
-| [ShengSuanYun](https://www.shengsuanyun.com/?from=CH_KYIPP758) | ✅ | Plataforma de recursos LLM y GPU |
-| [302.AI](https://share.302.ai/SuTG99) | ✅ | Gateway LLM (MaaS) |
-| [Google Gemini](https://aistudio.google.com/prompts/new_chat) | ✅ | |
-| [Dify](https://dify.ai) | ✅ | Plataforma LLMOps |
-| [Ollama](https://ollama.com/) | ✅ | Plataforma de ejecución de LLM local |
-| [LMStudio](https://lmstudio.ai/) | ✅ | Plataforma de ejecución de LLM local |
-| [GiteeAI](https://ai.gitee.com/) | ✅ | Gateway de interfaz LLM (MaaS) |
-| [SiliconFlow](https://siliconflow.cn/) | ✅ | Gateway LLM (MaaS) |
-| [Aliyun Bailian](https://bailian.console.aliyun.com/) | ✅ | Gateway LLM (MaaS), plataforma LLMOps |
-| [Volc Engine Ark](https://console.volcengine.com/ark/region:ark+cn-beijing/model?vendor=Bytedance&view=LIST_VIEW) | ✅ | Gateway LLM (MaaS), plataforma LLMOps |
-| [ModelScope](https://modelscope.cn/docs/model-service/API-Inference/intro) | ✅ | Gateway LLM (MaaS) |
-| [MCP](https://modelcontextprotocol.io/) | ✅ | Compatible con acceso a herramientas a través del protocolo MCP |
+[![Deploy on Zeabur](https://zeabur.com/button.svg)](https://zeabur.com/en-US/templates/ZKTBDH)
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.app/template/yRrAyL?referralCode=vogKPF)
 
-## 🤝 Contribución de la Comunidad
+**Más opciones:** [Docker](https://link.langbot.app/en/docs/docker) · [Manual](https://link.langbot.app/en/docs/manual-deploy) · [BTPanel](https://link.langbot.app/en/docs/bt-panel) · [Kubernetes](https://docs.langbot.app/en/deploy/langbot/kubernetes)
 
-Gracias a los siguientes [contribuidores de código](https://github.com/langbot-app/LangBot/graphs/contributors) y otros miembros de la comunidad por sus contribuciones a LangBot:
+---
+
+## Plataformas Soportadas
+
+| Plataforma | Estado | Notas |
+|----------|--------|-------|
+| Discord | ✅ | Oficial |
+| Telegram | ✅ | Oficial |
+| Slack | ✅ | Oficial |
+| LINE | ✅ | Oficial |
+| QQ | ✅ | Personal y API Oficial (Canal, DM, Grupo) |
+| WeCom | ✅ | WeChat Empresarial, CS Externo, AI Bot |
+| WeChat | ✅ | Personal y Cuenta Oficial |
+| Lark | ✅ | Oficial |
+| DingTalk | ✅ | Oficial |
+| KOOK | ✅ | Oficial |
+| Satori | ✅ |  |
+| Email | ✅ | Matrix, Satori |
+| Matrix | ✅ | Admite varias plataformas puenteadas como Signal, WhatsApp, Messenger, iMessage, Mattermost, Google Chat, IRC, XMPP, Zulip y más |
+
+---
+
+## LLMs e Integraciones Soportadas
+
+| Proveedor | Tipo | Estado |
+|----------|------|--------|
+| [OpenAI](https://platform.openai.com/) | LLM | ✅ |
+| [Anthropic](https://www.anthropic.com/) | LLM | ✅ |
+| [DeepSeek](https://www.deepseek.com/) | LLM | ✅ |
+| [Google Gemini](https://aistudio.google.com/prompts/new_chat) | LLM | ✅ |
+| [xAI](https://x.ai/) | LLM | ✅ |
+| [Moonshot](https://www.moonshot.cn/) | LLM | ✅ |
+| [Zhipu AI](https://open.bigmodel.cn/) | LLM | ✅ |
+| [Ollama](https://ollama.com/) | LLM Local | ✅ |
+| [LM Studio](https://lmstudio.ai/) | LLM Local | ✅ |
+| [Dify](https://dify.ai) | LLMOps | ✅ |
+| [MCP](https://modelcontextprotocol.io/) | Protocolo | ✅ |
+| [SiliconFlow](https://siliconflow.cn/) | Pasarela | ✅ |
+| [Aliyun Bailian](https://bailian.console.aliyun.com/) | Pasarela | ✅ |
+| [Volc Engine Ark](https://console.volcengine.com/ark/region:ark+cn-beijing/model?vendor=Bytedance&view=LIST_VIEW) | Pasarela | ✅ |
+| [ModelScope](https://modelscope.cn/docs/model-service/API-Inference/intro) | Pasarela | ✅ |
+| [GiteeAI](https://ai.gitee.com/) | Pasarela | ✅ |
+| [CompShare](https://www.compshare.cn/?ytag=GPU_YY-gh_langbot) | Plataforma GPU | ✅ |
+| [PPIO](https://ppinfra.com/user/register?invited_by=QJKFYD&utm_source=github_langbot) | Plataforma GPU | ✅ |
+| [ShengSuanYun](https://www.shengsuanyun.com/?from=CH_KYIPP758) | Plataforma GPU | ✅ |
+| [接口 AI](https://jiekou.ai/) | Pasarela | ✅ |
+| [302.AI](https://share.302ai.cn/SuTG99) | Pasarela | ✅ |
+| [Qiniu](https://www.qiniu.com/ai/agent) | Pasarela | ✅ |
+
+[→ Ver todas las integraciones](https://link.langbot.app/en/docs/features)
+
+---
+
+## ¿Por qué LangBot?
+
+| Caso de Uso | Cómo Ayuda LangBot |
+|----------|-------------------|
+| **Atención al cliente** | Despliegue agentes de IA en Slack/Discord/Telegram que respondan preguntas usando su base de conocimientos |
+| **Herramientas internas** | Conecte flujos de trabajo de n8n/Dify a WeCom/DingTalk para procesos empresariales automatizados |
+| **Gestión de comunidades** | Modere grupos de QQ/Discord con filtrado de contenido e interacción impulsados por IA |
+| **Presencia multiplataforma** | Un solo bot, todas las plataformas. Gestione desde un único panel de control |
+
+---
+
+## Demo en Vivo
+
+**Pruébelo ahora:** https://demo.langbot.dev/
+- Correo electrónico: `demo@langbot.app`
+- Contraseña: `langbot123456`
+
+*Nota: Entorno de demostración público. No ingrese información confidencial.*
+
+## Diseñado para Agentes de IA 🤖
+
+LangBot es **agent-friendly por diseño** —— tus agentes de codificación (Claude Code, Codex, Copilot, Cursor, …) pueden operar, extender y desplegar LangBot con soporte de primera clase:
+
+- **Servidor MCP** —— LangBot expone un endpoint integrado de [Model Context Protocol](https://modelcontextprotocol.io/) en `/mcp`, replicando la API HTTP para que un agente gestione bots, pipelines, plugins y modelos de forma programática. Autentícate con la misma API key (configura una clave global en `config.yaml` o usa una clave por usuario) —— sin flujo de login. Configúralo en la pestaña **API & MCP** del panel web.
+- **Skills en el repositorio** —— El directorio [`skills/`](skills/) es la **única fuente de verdad** para trabajar con LangBot: desarrollo de plugins, desarrollo del core, pruebas end-to-end, despliegue y operación de los servidores MCP de LangBot / LangBot Space. Apunta tu agente a este directorio y sabrá cómo construir.
+- **AGENTS.md** —— Cada repo incluye un [`AGENTS.md`](AGENTS.md) (enlazado simbólicamente a `CLAUDE.md`) que describe la arquitectura, las convenciones y la regla de que los cambios en la API deben mantener sincronizados el servidor MCP y los skills.
+- **`llms.txt`** —— El contexto del proyecto legible por máquina para LLMs está publicado en el sitio web.
+
+> **Nube / Marketplace:** [LangBot Space](https://space.langbot.app) también expone un servidor MCP para que los agentes busquen e inspeccionen el marketplace de plugins / MCP / skills, autenticados con un Personal Access Token.
+
+---
+
+## Comunidad
+
+[![Discord](https://img.shields.io/discord/1335141740050649118?logo=discord&label=Discord)](https://discord.gg/wdNEHETs87)
+
+- [Comunidad de Discord](https://discord.gg/wdNEHETs87)
+
+---
+
+## Historial de Stars
+
+[![Star History Chart](https://api.star-history.com/svg?repos=langbot-app/LangBot&type=Date)](https://star-history.com/#langbot-app/LangBot&Date)
+
+---
+
+## Colaboradores
+
+Gracias a todos los [colaboradores](https://github.com/langbot-app/LangBot/graphs/contributors) que han ayudado a mejorar LangBot:
 
 <a href="https://github.com/langbot-app/LangBot/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=langbot-app/LangBot" />

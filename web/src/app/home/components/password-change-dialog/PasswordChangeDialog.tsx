@@ -1,7 +1,5 @@
-'use client';
-
 import * as React from 'react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -26,36 +24,39 @@ import {
 import { Input } from '@/components/ui/input';
 import { httpClient } from '@/app/infra/http/HttpClient';
 
-const getFormSchema = (t: (key: string) => string) =>
-  z
-    .object({
-      currentPassword: z
-        .string()
-        .min(1, { message: t('common.currentPasswordRequired') }),
-      newPassword: z
-        .string()
-        .min(1, { message: t('common.newPasswordRequired') }),
-      confirmNewPassword: z
-        .string()
-        .min(1, { message: t('common.confirmPasswordRequired') }),
-    })
-    .refine((data) => data.newPassword === data.confirmNewPassword, {
-      message: t('common.passwordsDoNotMatch'),
-      path: ['confirmNewPassword'],
-    });
-
 interface PasswordChangeDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  hasPassword?: boolean;
 }
 
 export default function PasswordChangeDialog({
   open,
   onOpenChange,
+  hasPassword = true,
 }: PasswordChangeDialogProps) {
   const { t } = useTranslation();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const formSchema = getFormSchema(t);
+
+  const getFormSchema = () =>
+    z
+      .object({
+        currentPassword: hasPassword
+          ? z.string().min(1, { message: t('common.currentPasswordRequired') })
+          : z.string().optional(),
+        newPassword: z
+          .string()
+          .min(1, { message: t('common.newPasswordRequired') }),
+        confirmNewPassword: z
+          .string()
+          .min(1, { message: t('common.confirmPasswordRequired') }),
+      })
+      .refine((data) => data.newPassword === data.confirmNewPassword, {
+        message: t('common.passwordsDoNotMatch'),
+        path: ['confirmNewPassword'],
+      });
+
+  const formSchema = getFormSchema();
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -66,14 +67,30 @@ export default function PasswordChangeDialog({
     },
   });
 
+  // Reset form when dialog opens/closes or hasPassword changes
+  useEffect(() => {
+    if (open) {
+      form.reset({
+        currentPassword: '',
+        newPassword: '',
+        confirmNewPassword: '',
+      });
+    }
+  }, [open, hasPassword, form]);
+
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     setIsSubmitting(true);
     try {
-      await httpClient.changePassword(
-        values.currentPassword,
-        values.newPassword,
-      );
-      toast.success(t('common.changePasswordSuccess'));
+      if (hasPassword) {
+        await httpClient.changePassword(
+          values.currentPassword!,
+          values.newPassword,
+        );
+        toast.success(t('common.changePasswordSuccess'));
+      } else {
+        await httpClient.setPassword(values.newPassword, undefined);
+        toast.success(t('account.passwordSetSuccess'));
+      }
       form.reset();
       onOpenChange(false);
     } catch {
@@ -87,27 +104,33 @@ export default function PasswordChangeDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{t('common.changePassword')}</DialogTitle>
+          <DialogTitle>
+            {hasPassword
+              ? t('common.changePassword')
+              : t('account.setPassword')}
+          </DialogTitle>
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <FormField
-              control={form.control}
-              name="currentPassword"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t('common.currentPassword')}</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="password"
-                      placeholder={t('common.enterCurrentPassword')}
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            {hasPassword && (
+              <FormField
+                control={form.control}
+                name="currentPassword"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('common.currentPassword')}</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="password"
+                        placeholder={t('common.enterCurrentPassword')}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
             <FormField
               control={form.control}
               name="newPassword"

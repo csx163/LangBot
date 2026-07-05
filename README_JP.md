@@ -1,146 +1,196 @@
 <p align="center">
 <a href="https://langbot.app">
-<img width="130" src="https://docs.langbot.app/langbot-logo.png" alt="LangBot"/>
+<img width="130" src="res/logo-blue.png" alt="LangBot"/>
 </a>
 
 <div align="center">
 
-<a href="https://www.producthunt.com/products/langbot?utm_source=badge-follow&utm_medium=badge&utm_source=badge-langbot" target="_blank"><img src="https://api.producthunt.com/widgets/embed-image/v1/follow.svg?product_id=1077185&theme=light" alt="LangBot - Production&#0045;grade&#0032;IM&#0032;bot&#0032;made&#0032;easy&#0046; | Product Hunt" style="width: 250px; height: 54px;" width="250" height="54" /></a>
+<a href="https://www.producthunt.com/products/langbot/launches/langbot?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-langbot" target="_blank" rel="noopener noreferrer"><img alt="LangBot - Easy-to-use global IM bot platform designed for the LLM era | Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=979554&amp;theme=light&amp;t=1782822143403"></a>
 
-<h3>LangBotでIMボットを素早く構築、デバッグ、デプロイ。</h3>
+<h3>AIエージェント搭載IMボットを構築するための本番グレードプラットフォーム。</h3>
+<h4>Slack、Discord、Telegram、WeChat などに AI ボットを素早く構築、デバッグ、デプロイ。</h4>
 
-[English](README_EN.md) / [简体中文](README.md) / [繁體中文](README_TW.md) / 日本語 / [Español](README_ES.md) / [Français](README_FR.md) / [한국어](README_KO.md) / [Русский](README_RU.md) / [Tiếng Việt](README_VI.md)
+[English](README.md) / [简体中文](README_CN.md) / [繁體中文](README_TW.md) / 日本語 / [Español](README_ES.md) / [Français](README_FR.md) / [한국어](README_KO.md) / [Русский](README_RU.md) / [Tiếng Việt](README_VI.md)
 
 [![Discord](https://img.shields.io/discord/1335141740050649118?logo=discord&labelColor=%20%235462eb&logoColor=%20%23f5f5f5&color=%20%235462eb)](https://discord.gg/wdNEHETs87)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/langbot-app/LangBot)
 [![GitHub release (latest by date)](https://img.shields.io/github/v/release/langbot-app/LangBot)](https://github.com/langbot-app/LangBot/releases/latest)
 <img src="https://img.shields.io/badge/python-3.10 ~ 3.13 -blue.svg" alt="python">
+[![GitHub stars](https://img.shields.io/github/stars/langbot-app/LangBot?style=social)](https://github.com/langbot-app/LangBot/stargazers)
 
 <a href="https://langbot.app">ホーム</a> ｜
-<a href="https://docs.langbot.app/en/insight/guide.html">デプロイ</a> ｜
-<a href="https://docs.langbot.app/en/plugin/plugin-intro.html">プラグイン</a> ｜
-<a href="https://github.com/langbot-app/LangBot/issues/new?assignees=&labels=%E7%8B%AC%E7%AB%8B%E6%8F%92%E4%BB%B6&projects=&template=submit-plugin.yml&title=%5BPlugin%5D%3A+%E8%AF%B7%E6%B1%82%E7%99%BB%E8%AE%B0%E6%96%B0%E6%8F%92%E4%BB%B6">プラグインの提出</a>
+<a href="https://link.langbot.app/ja/docs/features">機能</a> ｜
+<a href="https://link.langbot.app/ja/docs/guide">ドキュメント</a> ｜
+<a href="https://link.langbot.app/ja/docs/api">API</a> ｜
+<a href="https://space.langbot.app">プラグインマーケット</a> ｜
+<a href="https://langbot.featurebase.app/roadmap">ロードマップ</a>
 
 </div>
 
 </p>
 
-## 📦 始め方
+---
 
-#### クイックスタート
+## LangBot とは？
 
-`uvx` を使用した迅速なデプロイ（[uv](https://docs.astral.sh/uv/getting-started/installation/) が必要です）：
+LangBot は、AI搭載のインスタントメッセージングボットを構築するための**オープンソースの本番グレードプラットフォーム**です。大規模言語モデル（LLM）をあらゆるチャットプラットフォームに接続し、会話、タスク実行、既存のワークフローとの統合が可能なインテリジェントエージェントを作成できます。
 
-```bash
-uvx langbot
-```
+<p align="center">
+<img src="res/dashboard-overview.png" alt="LangBot Web 管理パネルのダッシュボード — メッセージ量、モデル呼び出し、成功率、アクティブセッションをリアルタイム監視" width="720"/>
+</p>
 
-http://localhost:5300 にアクセスして使用を開始します。
+### 主な機能
 
-#### Docker Compose デプロイ
+- **AI対話とエージェント** — マルチターン対話、ツール呼び出し、マルチモーダル対応、ストリーミング出力。RAG（ナレッジベース）を内蔵し、[Dify](https://dify.ai)、[Coze](https://coze.com)、[n8n](https://n8n.io)、[Langflow](https://langflow.org)、[Deerflow](https://deerflow.tech)、[Weknora](https://weknora.weixin.qq.com) と深く統合。
+- **ユニバーサルIMプラットフォーム対応** — 単一のコードベースで Discord、Telegram、Slack、LINE、QQ、WeChat、WeCom、Lark、DingTalk、KOOK に対応。
+- **本番環境対応** — アクセス制御、レート制限、センシティブワードフィルタリング、包括的な監視、例外処理を搭載。エンタープライズの信頼に応える品質。
+- **プラグインエコシステム** — 数百のプラグイン、イベント駆動アーキテクチャ、コンポーネント拡張、[MCPプロトコル](https://modelcontextprotocol.io/)対応。
+- **Web管理パネル** — 直感的なブラウザインターフェースからボットの設定、管理、監視が可能。YAML編集は不要。
+- **マルチパイプラインアーキテクチャ** — 異なるシナリオに異なるボットを配置し、包括的な監視と例外処理を実現。
 
-```bash
-git clone https://github.com/langbot-app/LangBot
-cd LangBot/docker
-docker compose up -d
-```
+[→ すべての機能について詳しく見る](https://link.langbot.app/ja/docs/features)
 
-http://localhost:5300 にアクセスして使用を開始します。
+📍 実践ガイド: [5分でマルチプラットフォームAIボットをデプロイ](https://blog.langbot.app/en/blog/deploy-ai-bot-in-5-minutes/)、[DeepSeekをWeChat・Discord・Telegramに接続](https://blog.langbot.app/en/blog/connect-deepseek-to-wechat/)、[Dify AgentをDiscord・Telegram・Slackで動かす](https://blog.langbot.app/en/blog/dify-agent-discord-telegram-slack/)、[n8n連携チャットボットを構築](https://blog.langbot.app/en/blog/n8n-multi-platform-ai-chatbot/)。
 
-詳細なドキュメントは[Dockerデプロイ](https://docs.langbot.app/en/deploy/langbot/docker.html)を参照してください。
-
-#### Panelでのワンクリックデプロイ
-
-LangBotはBTPanelにリストされています。BTPanelをインストールしている場合は、[ドキュメント](https://docs.langbot.app/en/deploy/langbot/one-click/bt.html)を使用して使用できます。
-
-#### Zeaburクラウドデプロイ
-
-コミュニティが提供するZeaburテンプレート。
-
-[![Deploy on Zeabur](https://zeabur.com/button.svg)](https://zeabur.com/en-US/templates/ZKTBDH)
-
-#### Railwayクラウドデプロイ
-
-[![Deploy on Railway](https://railway.com/button.svg)](https://railway.app/template/yRrAyL?referralCode=vogKPF)
-
-#### その他のデプロイ方法
-
-リリースバージョンを直接使用して実行します。[手動デプロイ](https://docs.langbot.app/en/deploy/langbot/manual.html)のドキュメントを参照してください。
-
-#### Kubernetes デプロイ
-
-[Kubernetes デプロイ](./docker/README_K8S.md) ドキュメントを参照してください。
+---
 
 ## 😎 最新情報を入手
 
 リポジトリの右上にある Star と Watch ボタンをクリックして、最新の更新を取得してください。
 
-![star gif](https://docs.langbot.app/star.gif)
+![star gif](https://langbot.app/star.gif)
 
-## ✨ 機能
+## クイックスタート
 
-<img width="500" src="https://docs.langbot.app/ui/bot-page-en-rounded.png" />
+### ☁️ LangBot Cloud（推奨）
 
+**[LangBot Cloud](https://space.langbot.app/cloud)** — デプロイ不要、すぐに使えます。
 
-- 💬 LLM / エージェントとのチャット: 複数のLLMをサポートし、グループチャットとプライベートチャットに対応。マルチラウンドの会話、ツールの呼び出し、マルチモーダル、ストリーミング出力機能をサポート、RAG（知識ベース）を組み込み、[Dify](https://dify.ai)、[Coze](https://coze.com)、[n8n](https://n8n.io) などの LLMOps プラットフォームと深く統合。
-- 🤖 多プラットフォーム対応: 現在、QQ、QQ チャンネル、WeChat、個人 WeChat、Lark、DingTalk、Discord、Telegram、KOOK、Slack、LINE など、複数のプラットフォームをサポートしています。
-- 🛠️ 高い安定性、豊富な機能: ネイティブのアクセス制御、レート制限、敏感な単語のフィルタリングなどのメカニズムをサポート。使いやすく、複数のデプロイ方法をサポート。複数のパイプライン設定をサポートし、異なるボットを異なる用途に使用できます。
-- 🧩 プラグイン拡張、活発なコミュニティ: 高い安定性、高いセキュリティの生産レベルのプラグインシステム；イベント駆動、コンポーネント拡張などのプラグインメカニズムをサポート。適配 Anthropic [MCP プロトコル](https://modelcontextprotocol.io/)；豊富なエコシステム、現在数百のプラグインが存在。
-- 😻 Web UI: ブラウザを通じてLangBotインスタンスを管理することをサポート。
+### ワンライン起動
 
-詳細な仕様については、[ドキュメント](https://docs.langbot.app/en/insight/features.html)を参照してください。
+```bash
+uvx langbot
+```
 
-または、デモ環境にアクセスしてください: https://demo.langbot.dev/
-  - ログイン情報: メール: `demo@langbot.app` パスワード: `langbot123456`
-  - 注意: WebUI のデモンストレーションのみの場合、公開環境では機密情報を入力しないでください。
+> [uv](https://docs.astral.sh/uv/getting-started/installation/) が必要です。http://localhost:5300 にアクセスして完了。
 
-### メッセージプラットフォーム
+### Docker Compose
+
+```bash
+git clone https://github.com/langbot-app/LangBot
+cd LangBot/docker
+docker compose --profile all up -d
+```
+
+### ワンクリッククラウドデプロイ
+
+[![Deploy on Zeabur](https://zeabur.com/button.svg)](https://zeabur.com/en-US/templates/ZKTBDH)
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.app/template/yRrAyL?referralCode=vogKPF)
+
+**その他:** [Docker](https://link.langbot.app/en/docs/docker) · [手動デプロイ](https://link.langbot.app/en/docs/manual-deploy) · [BTPanel](https://link.langbot.app/en/docs/bt-panel) · [Kubernetes](https://docs.langbot.app/en/deploy/langbot/kubernetes)
+
+---
+
+## 対応プラットフォーム
 
 | プラットフォーム | ステータス | 備考 |
-| --- | --- | --- |
-| Discord | ✅ |  |
-| Telegram | ✅ |  |
-| Slack | ✅ |  |
-| LINE | ✅ |  |
-| 個人QQ | ✅ |  |
-| QQ公式API | ✅ |  |
-| WeCom | ✅ |  |
-| WeComCS | ✅ |  |
-| WeCom AI Bot | ✅ |  |
-| 個人WeChat | ✅ | |
-| Lark | ✅ |  |
-| DingTalk | ✅ |  |
-| KOOK | ✅ |  |
+|----------|--------|-------|
+| Discord | ✅ | 公式 |
+| Telegram | ✅ | 公式 |
+| Slack | ✅ | 公式 |
+| LINE | ✅ | 公式 |
+| QQ | ✅ | 個人・公式API（チャンネル・DM・グループ） |
+| WeCom | ✅ | 企業WeChat、外部CS、AIボット |
+| WeChat | ✅ | 個人・公式アカウント |
+| Lark | ✅ | 公式 |
+| DingTalk | ✅ | 公式 |
+| KOOK | ✅ | 公式 |
+| Satori | ✅ |  |
+| Email | ✅ | Matrix、Satori |
+| Matrix | ✅ | Signal、WhatsApp、Messenger、iMessage、Mattermost、Google Chat、IRC、XMPP、Zulip など複数のブリッジ先プラットフォームに対応 |
 
-### LLMs
+---
 
-| LLM | ステータス | 備考 |
-| --- | --- | --- |
-| [OpenAI](https://platform.openai.com/) | ✅ | 任意のOpenAIインターフェース形式モデルに対応 |
-| [DeepSeek](https://www.deepseek.com/) | ✅ |  |
-| [Moonshot](https://www.moonshot.cn/) | ✅ |  |
-| [Anthropic](https://www.anthropic.com/) | ✅ |  |
-| [xAI](https://x.ai/) | ✅ |  |
-| [Zhipu AI](https://open.bigmodel.cn/) | ✅ |  |
-| [CompShare](https://www.compshare.cn/?ytag=GPU_YY-gh_langbot) | ✅ | 大模型とGPUリソースプラットフォーム |
-| [PPIO](https://ppinfra.com/user/register?invited_by=QJKFYD&utm_source=github_langbot) | ✅ | 大模型とGPUリソースプラットフォーム |
-| [接口 AI](https://jiekou.ai/) | ✅ | LLMゲートウェイ(MaaS) |
-| [ShengSuanYun](https://www.shengsuanyun.com/?from=CH_KYIPP758) | ✅ | LLMとGPUリソースプラットフォーム |
-| [302.AI](https://share.302.ai/SuTG99) | ✅ | LLMゲートウェイ(MaaS) |
-| [Google Gemini](https://aistudio.google.com/prompts/new_chat) | ✅ | |
-| [Dify](https://dify.ai) | ✅ | LLMOpsプラットフォーム |
-| [Ollama](https://ollama.com/) | ✅ | ローカルLLM実行プラットフォーム |
-| [LMStudio](https://lmstudio.ai/) | ✅ | ローカルLLM実行プラットフォーム |
-| [GiteeAI](https://ai.gitee.com/) | ✅ | LLMインターフェースゲートウェイ(MaaS) |
-| [SiliconFlow](https://siliconflow.cn/) | ✅ | LLMゲートウェイ(MaaS) |
-| [Aliyun Bailian](https://bailian.console.aliyun.com/) | ✅ | LLMゲートウェイ(MaaS), LLMOpsプラットフォーム |
-| [Volc Engine Ark](https://console.volcengine.com/ark/region:ark+cn-beijing/model?vendor=Bytedance&view=LIST_VIEW) | ✅ | LLMゲートウェイ(MaaS), LLMOpsプラットフォーム |
-| [ModelScope](https://modelscope.cn/docs/model-service/API-Inference/intro) | ✅ | LLMゲートウェイ(MaaS) |
-| [MCP](https://modelcontextprotocol.io/) | ✅ | MCPプロトコルをサポート |
+## 対応LLMと統合
 
-## 🤝 コミュニティ貢献
+| プロバイダー | タイプ | ステータス |
+|----------|------|--------|
+| [OpenAI](https://platform.openai.com/) | LLM | ✅ |
+| [Anthropic](https://www.anthropic.com/) | LLM | ✅ |
+| [DeepSeek](https://www.deepseek.com/) | LLM | ✅ |
+| [Google Gemini](https://aistudio.google.com/prompts/new_chat) | LLM | ✅ |
+| [xAI](https://x.ai/) | LLM | ✅ |
+| [Moonshot](https://www.moonshot.cn/) | LLM | ✅ |
+| [Zhipu AI](https://open.bigmodel.cn/) | LLM | ✅ |
+| [Ollama](https://ollama.com/) | ローカルLLM | ✅ |
+| [LM Studio](https://lmstudio.ai/) | ローカルLLM | ✅ |
+| [Dify](https://dify.ai) | LLMOps | ✅ |
+| [MCP](https://modelcontextprotocol.io/) | プロトコル | ✅ |
+| [SiliconFlow](https://siliconflow.cn/) | ゲートウェイ | ✅ |
+| [Aliyun Bailian](https://bailian.console.aliyun.com/) | ゲートウェイ | ✅ |
+| [Volc Engine Ark](https://console.volcengine.com/ark/region:ark+cn-beijing/model?vendor=Bytedance&view=LIST_VIEW) | ゲートウェイ | ✅ |
+| [ModelScope](https://modelscope.cn/docs/model-service/API-Inference/intro) | ゲートウェイ | ✅ |
+| [GiteeAI](https://ai.gitee.com/) | ゲートウェイ | ✅ |
+| [CompShare](https://www.compshare.cn/?ytag=GPU_YY-gh_langbot) | GPUプラットフォーム | ✅ |
+| [PPIO](https://ppinfra.com/user/register?invited_by=QJKFYD&utm_source=github_langbot) | GPUプラットフォーム | ✅ |
+| [ShengSuanYun](https://www.shengsuanyun.com/?from=CH_KYIPP758) | GPUプラットフォーム | ✅ |
+| [接口 AI](https://jiekou.ai/) | ゲートウェイ | ✅ |
+| [302.AI](https://share.302ai.cn/SuTG99) | ゲートウェイ | ✅ |
+| [Qiniu](https://www.qiniu.com/ai/agent) | ゲートウェイ | ✅ |
 
-LangBot への貢献に対して、以下の [コード貢献者](https://github.com/langbot-app/LangBot/graphs/contributors) とコミュニティの他のメンバーに感謝します。
+[→ すべての統合を表示](https://link.langbot.app/en/docs/features)
+
+---
+
+## なぜ LangBot？
+
+| ユースケース | LangBot の活用方法 |
+|----------|-------------------|
+| **カスタマーサポート** | ナレッジベースを活用して質問に回答するAIエージェントをSlack/Discord/Telegramにデプロイ |
+| **社内ツール** | n8n/Difyのワークフローを WeCom/DingTalk に接続し、業務プロセスを自動化 |
+| **コミュニティ管理** | AI搭載のコンテンツフィルタリングとインタラクションでQQ/Discordグループをモデレーション |
+| **マルチプラットフォーム展開** | 1つのボットで全プラットフォームに対応。単一のダッシュボードから管理 |
+
+---
+
+## ライブデモ
+
+**今すぐ試す:** https://demo.langbot.dev/
+- メール: `demo@langbot.app`
+- パスワード: `langbot123456`
+
+*注意: 公開デモ環境です。機密情報を入力しないでください。*
+
+## AI エージェントのために 🤖
+
+LangBot は **設計段階からエージェントフレンドリー** です。お使いのコーディングエージェント（Claude Code、Codex、Copilot、Cursor など）が、ファーストクラスのサポートで LangBot を操作・拡張・デプロイできます：
+
+- **MCP サーバー** —— LangBot は組み込みの [Model Context Protocol](https://modelcontextprotocol.io/) エンドポイント `/mcp` を公開し、HTTP API とミラーリングされているため、エージェントがボット・パイプライン・プラグイン・モデルをプログラム的に管理できます。同じ API キーで認証（`config.yaml` でグローバルキーを設定、またはユーザーキーを使用）—— ログインフロー不要。Web パネルの **API & MCP** タブで設定します。
+- **リポジトリ内 Skills** —— [`skills/`](skills/) ディレクトリは LangBot を扱うための**唯一の信頼できる情報源**です：プラグイン開発、コア開発、E2E テスト、デプロイ、LangBot / LangBot Space MCP サーバーの操作。エージェントをこのディレクトリに向ければ、構築方法を理解します。
+- **AGENTS.md** —— すべてのリポジトリに [`AGENTS.md`](AGENTS.md)（`CLAUDE.md` へのシンボリックリンク）があり、アーキテクチャ・規約、そして「API 変更時は MCP サーバーと skills を同期する」というルールを記述しています。
+- **`llms.txt`** —— LLM 向けの機械可読なプロジェクトコンテキストを公式サイトで公開しています。
+
+> **クラウド / マーケット：** [LangBot Space](https://space.langbot.app) も MCP サーバーを公開しており、エージェントが Personal Access Token で認証してプラグイン / MCP / Skill マーケットを検索・確認できます。
+
+---
+
+## コミュニティ
+
+[![Discord](https://img.shields.io/discord/1335141740050649118?logo=discord&label=Discord)](https://discord.gg/wdNEHETs87)
+
+- [Discord コミュニティ](https://discord.gg/wdNEHETs87)
+
+---
+
+## Star 推移
+
+[![Star History Chart](https://api.star-history.com/svg?repos=langbot-app/LangBot&type=Date)](https://star-history.com/#langbot-app/LangBot&Date)
+
+---
+
+## コントリビューター
+
+LangBot をより良くするために貢献してくださったすべての[コントリビューター](https://github.com/langbot-app/LangBot/graphs/contributors)に感謝します:
 
 <a href="https://github.com/langbot-app/LangBot/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=langbot-app/LangBot" />

@@ -2,18 +2,16 @@ from __future__ import annotations
 
 import datetime
 import typing
-import json
-import uuid
+
 
 import sqlalchemy.ext.asyncio as sqlalchemy_asyncio
 import sqlalchemy
 
 from . import database, migration
-from ..entity.persistence import base, pipeline, metadata
+from ..entity.persistence import base, metadata, model as persistence_model
 from ..entity import persistence
 from ..core import app
 from ..utils import constants, importutil
-from ..api.http.service import pipeline as pipeline_service
 from . import databases, migrations
 
 importutil.import_modules_in_pkg(databases)
@@ -78,7 +76,10 @@ class PersistenceManager:
 
             self.ap.logger.info(f'Successfully upgraded database to version {last_migration_number}.')
 
-        await self.write_default_pipeline()
+        # Run Alembic migrations (new migration system)
+        await self._run_alembic_migrations()
+
+        await self.write_space_model_providers()
 
     async def create_tables(self):
         # create tables
@@ -100,30 +101,64 @@ class PersistenceManager:
             if row is None:
                 await self.execute_async(sqlalchemy.insert(metadata.Metadata).values(item))
 
-    async def write_default_pipeline(self):
-        # write default pipeline
-        result = await self.execute_async(sqlalchemy.select(pipeline.LegacyPipeline))
-        default_pipeline_uuid = None
-        if result.first() is None:
-            self.ap.logger.info('Creating default pipeline...')
+    async def write_space_model_providers(self):
+        space_models_gateway_api_url = self.ap.instance_config.data.get('space', {}).get(
+            'models_gateway_api_url', 'https://api.langbot.cloud/v1'
+        )
 
-            pipeline_config = json.loads(importutil.read_resource_file('templates/default-pipeline-config.json'))
+        # write space model providers
+        result = await self.execute_async(
+            sqlalchemy.select(persistence_model.ModelProvider).where(
+                persistence_model.ModelProvider.requester == 'space-chat-completions'
+            )
+        )
+        exists_space_chat_completions_model_provider = result.first()
 
-            default_pipeline_uuid = str(uuid.uuid4())
-            pipeline_data = {
-                'uuid': default_pipeline_uuid,
-                'for_version': self.ap.ver_mgr.get_current_version(),
-                'stages': pipeline_service.default_stage_order,
-                'is_default': True,
-                'name': 'ChatPipeline',
-                'description': 'Default pipeline, new bots will be bound to this pipeline | 默认提供的流水线，您配置的机器人将自动绑定到此流水线',
-                'config': pipeline_config,
-                'extensions_preferences': {},
+        # api keys will be set/updated when the oauth callback
+        if exists_space_chat_completions_model_provider is None:
+            self.ap.logger.info('Creating space model providers...')
+            space_chat_completions_model_provider = {
+                'uuid': '00000000-0000-0000-0000-000000000000',
+                'name': 'LangBot Models',
+                'requester': 'space-chat-completions',
+                'base_url': space_models_gateway_api_url,
+                'api_keys': [],
             }
 
-            await self.execute_async(sqlalchemy.insert(pipeline.LegacyPipeline).values(pipeline_data))
+            await self.execute_async(
+                sqlalchemy.insert(persistence_model.ModelProvider).values(space_chat_completions_model_provider)
+            )
+        else:
+            if exists_space_chat_completions_model_provider.base_url != space_models_gateway_api_url:
+                await self.execute_async(
+                    sqlalchemy.update(persistence_model.ModelProvider)
+                    .where(persistence_model.ModelProvider.uuid == exists_space_chat_completions_model_provider.uuid)
+                    .values({'base_url': space_models_gateway_api_url})
+                )
 
-        # =================================
+    # =================================
+
+    async def _run_alembic_migrations(self):
+        """Run Alembic-based migrations after legacy migrations complete."""
+        from . import alembic_runner
+
+        engine = self.get_db_engine()
+
+        try:
+            current_rev = await alembic_runner.get_alembic_current(engine)
+
+            if current_rev is None:
+                # First time: stamp baseline so Alembic knows existing schema is up-to-date
+                self.ap.logger.info('Alembic: no revision found, stamping baseline...')
+                await alembic_runner.run_alembic_stamp(engine, '0001_baseline')
+                current_rev = '0001_baseline'
+
+            # Upgrade to head
+            await alembic_runner.run_alembic_upgrade(engine, 'head')
+            self.ap.logger.info('Alembic migrations completed.')
+        except Exception as e:
+            self.ap.logger.error(f'Alembic migration failed: {e}', exc_info=True)
+            raise
 
     async def execute_async(self, *args, **kwargs) -> sqlalchemy.engine.cursor.CursorResult:
         async with self.get_db_engine().connect() as conn:

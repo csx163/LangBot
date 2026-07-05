@@ -11,6 +11,7 @@ class LegacyPipeline(Base):
     uuid = sqlalchemy.Column(sqlalchemy.String(255), primary_key=True, unique=True)
     name = sqlalchemy.Column(sqlalchemy.String(255), nullable=False)
     description = sqlalchemy.Column(sqlalchemy.String(255), nullable=False)
+    emoji = sqlalchemy.Column(sqlalchemy.String(10), nullable=True, default='⚙️')
     created_at = sqlalchemy.Column(sqlalchemy.DateTime, nullable=False, server_default=sqlalchemy.func.now())
     updated_at = sqlalchemy.Column(
         sqlalchemy.DateTime,
@@ -25,7 +26,14 @@ class LegacyPipeline(Base):
     extensions_preferences = sqlalchemy.Column(
         sqlalchemy.JSON,
         nullable=False,
-        default={'enable_all_plugins': True, 'enable_all_mcp_servers': True, 'plugins': [], 'mcp_servers': []},
+        default={
+            'enable_all_plugins': True,
+            'enable_all_mcp_servers': True,
+            'plugins': [],
+            'mcp_servers': [],
+            'mcp_resources': [],
+            'mcp_resource_agent_read_enabled': True,
+        },
     )
 
 

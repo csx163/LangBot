@@ -2,16 +2,8 @@ import { PluginCardVO } from '@/app/home/plugins/components/plugin-installed/Plu
 import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { useTranslation } from 'react-i18next';
-import {
-  BugIcon,
-  ExternalLink,
-  Ellipsis,
-  Trash,
-  ArrowUp,
-  Settings,
-  FileText,
-} from 'lucide-react';
-import { getCloudServiceClientSync } from '@/app/infra/http';
+import { BugIcon, ExternalLink, Ellipsis, Trash, ArrowUp } from 'lucide-react';
+import { getCloudServiceClientSync, systemInfo } from '@/app/infra/http';
 import { httpClient } from '@/app/infra/http/HttpClient';
 import { Button } from '@/components/ui/button';
 import {
@@ -27,28 +19,20 @@ export default function PluginCardComponent({
   onCardClick,
   onDeleteClick,
   onUpgradeClick,
-  onViewReadme,
 }: {
   cardVO: PluginCardVO;
   onCardClick: () => void;
   onDeleteClick: (cardVO: PluginCardVO) => void;
   onUpgradeClick: (cardVO: PluginCardVO) => void;
-  onViewReadme: (cardVO: PluginCardVO) => void;
 }) {
   const { t } = useTranslation();
   const [dropdownOpen, setDropdownOpen] = useState(false);
-  const [isHovered, setIsHovered] = useState(false);
 
   return (
     <>
       <div
-        className="w-[100%] h-[10rem] bg-white rounded-[10px] shadow-[0px_2px_2px_0_rgba(0,0,0,0.2)] p-[1.2rem] cursor-pointer dark:bg-[#1f1f22] relative transition-all duration-200 hover:shadow-[0px_3px_6px_0_rgba(0,0,0,0.12)] hover:scale-[1.005]"
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => {
-          if (!dropdownOpen) {
-            setIsHovered(false);
-          }
-        }}
+        className="w-[100%] h-[10rem] bg-white rounded-[10px] border border-[#e4e4e7] dark:border-[#27272a] p-[1.2rem] cursor-pointer dark:bg-[#1f1f22] relative transition-all duration-200 hover:border-[#a1a1aa] dark:hover:border-[#3f3f46]"
+        onClick={() => onCardClick()}
       >
         <div className="w-full h-full flex flex-row items-start justify-start gap-[1.2rem]">
           {/* Icon - fixed width */}
@@ -76,6 +60,24 @@ export default function PluginCardComponent({
                   >
                     v{cardVO.version}
                   </Badge>
+                  {cardVO.type && (
+                    <Badge
+                      variant="outline"
+                      className={`text-[0.7rem] flex-shrink-0 ${
+                        cardVO.type === 'mcp'
+                          ? 'border-sky-500 text-sky-600 dark:border-sky-400 dark:text-sky-300'
+                          : cardVO.type === 'skill'
+                            ? 'border-emerald-500 text-emerald-600 dark:border-emerald-400 dark:text-emerald-300'
+                            : 'border-violet-500 text-violet-600 dark:border-violet-400 dark:text-violet-300'
+                      }`}
+                    >
+                      {cardVO.type === 'mcp'
+                        ? 'MCP'
+                        : cardVO.type === 'skill'
+                          ? t('common.skill')
+                          : t('market.typePlugin')}
+                    </Badge>
+                  )}
                   {cardVO.debug && (
                     <Badge
                       variant="outline"
@@ -145,7 +147,10 @@ export default function PluginCardComponent({
           </div>
 
           {/* Menu button - fixed width and position */}
-          <div className="flex flex-col items-center justify-between h-full relative z-20 flex-shrink-0">
+          <div
+            className="flex flex-col items-center justify-between h-full relative z-20 flex-shrink-0"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-center"></div>
 
             <div className="flex items-center justify-center">
@@ -153,18 +158,20 @@ export default function PluginCardComponent({
                 open={dropdownOpen}
                 onOpenChange={(open) => {
                   setDropdownOpen(open);
-                  if (!open) {
-                    setIsHovered(false);
-                  }
                 }}
               >
                 <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    className="bg-white dark:bg-[#1f1f22] hover:bg-gray-100 dark:hover:bg-[#2a2a2d]"
-                  >
-                    <Ellipsis className="w-4 h-4" />
-                  </Button>
+                  <div className="relative">
+                    <Button
+                      variant="ghost"
+                      className="bg-white dark:bg-[#1f1f22] hover:bg-gray-100 dark:hover:bg-[#2a2a2d]"
+                    >
+                      <Ellipsis className="w-4 h-4" />
+                    </Button>
+                    {cardVO.hasUpdate && (
+                      <div className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white dark:border-[#1f1f22]"></div>
+                    )}
+                  </div>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent>
                   {/**upgrade */}
@@ -179,6 +186,11 @@ export default function PluginCardComponent({
                     >
                       <ArrowUp className="w-4 h-4" />
                       <span>{t('plugins.update')}</span>
+                      {cardVO.hasUpdate && (
+                        <Badge className="ml-auto bg-red-500 hover:bg-red-500 text-white text-[0.6rem] px-1.5 py-0 h-4">
+                          {t('plugins.new')}
+                        </Badge>
+                      )}
                     </DropdownMenuItem>
                   )}
                   {/**view source */}
@@ -193,6 +205,7 @@ export default function PluginCardComponent({
                         } else if (cardVO.install_source === 'marketplace') {
                           window.open(
                             getCloudServiceClientSync().getPluginMarketplaceURL(
+                              systemInfo.cloud_service_url,
                               cardVO.author,
                               cardVO.name,
                             ),
@@ -221,45 +234,6 @@ export default function PluginCardComponent({
               </DropdownMenu>
             </div>
           </div>
-        </div>
-
-        {/* Hover overlay with action buttons */}
-        <div
-          className={`absolute inset-0 bg-gray-100/55 dark:bg-black/35 rounded-[10px] flex items-center justify-center gap-3 transition-all duration-200 z-10 ${
-            isHovered ? 'opacity-100' : 'opacity-0 pointer-events-none'
-          }`}
-        >
-          <Button
-            onClick={(e) => {
-              e.stopPropagation();
-              onViewReadme(cardVO);
-            }}
-            className={`bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg shadow-sm flex items-center gap-2 transition-all duration-200 ${
-              isHovered
-                ? 'translate-y-0 opacity-100'
-                : 'translate-y-1 opacity-0'
-            }`}
-            style={{ transitionDelay: isHovered ? '10ms' : '0ms' }}
-          >
-            <FileText className="w-4 h-4" />
-            {t('plugins.readme')}
-          </Button>
-          <Button
-            onClick={(e) => {
-              e.stopPropagation();
-              onCardClick();
-            }}
-            variant="outline"
-            className={`bg-white hover:bg-gray-100 text-gray-900 dark:bg-white dark:hover:bg-gray-100 dark:text-gray-900 px-4 py-2 rounded-lg shadow-sm flex items-center gap-2 transition-all duration-200 ${
-              isHovered
-                ? 'translate-y-0 opacity-100'
-                : 'translate-y-1 opacity-0'
-            }`}
-            style={{ transitionDelay: isHovered ? '20ms' : '0ms' }}
-          >
-            <Settings className="w-4 h-4" />
-            {t('plugins.config')}
-          </Button>
         </div>
       </div>
     </>

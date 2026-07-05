@@ -17,6 +17,10 @@
             "prefix": [],
             "regexp": []
         },
+        "message-aggregation": {
+            "enabled": false,
+            "delay": 1.5
+        },
         "misc": {
             "combine-quote-message": true
         }
@@ -34,18 +38,25 @@
     },
     "ai": {
         "runner": {
-            "runner": "local-agent"
+            "runner": "local-agent",
+            "expire-time": 0
         },
         "local-agent": {
-            "model": "",
+            "model": {
+                "primary": "",
+                "fallbacks": []
+            },
             "max-round": 10,
             "prompt": [
                 {
                     "role": "system",
-                    "content": "You are a helpful assistant."
+                    "content": "You are a helpful assistant. When tools are available, use them for exact calculations, data processing, and code execution instead of guessing. Unless the user explicitly asks for code or a script, return the result directly instead of printing the generated code."
                 }
             ],
-            "knowledge-bases": []
+            "knowledge-bases": [],
+            "box-session-id-template": "{launcher_type}_{launcher_id}",
+            "rerank-model": "",
+            "rerank-top-k": 5
         },
         "dify-service-api": {
             "base-url": "https://api.dify.ai/v1",
@@ -91,7 +102,8 @@
             "max": 0
         },
         "misc": {
-            "hide-exception": true,
+            "exception-handling": "show-hint",
+            "failure-hint": "Request failed.",
             "at-sender": true,
             "quote-origin": true,
             "track-function-calls": false,

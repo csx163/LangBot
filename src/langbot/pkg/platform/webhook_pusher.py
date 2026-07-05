@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import aiohttp
+
+from langbot.pkg.utils import httpclient
 import uuid
 from typing import TYPE_CHECKING
 
@@ -56,7 +58,7 @@ class WebhookPusher:
             # Check if any webhook responded with skip_pipeline=true
             for result in results:
                 if isinstance(result, dict) and result.get('skip_pipeline') is True:
-                    self.logger.info(f'Webhook responded with skip_pipeline=true, skipping pipeline for person message')
+                    self.logger.info('Webhook responded with skip_pipeline=true, skipping pipeline for person message')
                     return True
 
             return False
@@ -103,7 +105,7 @@ class WebhookPusher:
             # Check if any webhook responded with skip_pipeline=true
             for result in results:
                 if isinstance(result, dict) and result.get('skip_pipeline') is True:
-                    self.logger.info(f'Webhook responded with skip_pipeline=true, skipping pipeline for group message')
+                    self.logger.info('Webhook responded with skip_pipeline=true, skipping pipeline for group message')
                     return True
 
             return False
@@ -119,23 +121,23 @@ class WebhookPusher:
             dict | None: The response JSON if successful, None otherwise
         """
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    url,
-                    json=payload,
-                    headers={'Content-Type': 'application/json'},
-                    timeout=aiohttp.ClientTimeout(total=15),
-                ) as response:
-                    if response.status >= 400:
-                        self.logger.warning(f'Webhook {url} returned status {response.status}')
+            session = httpclient.get_session()
+            async with session.post(
+                url,
+                json=payload,
+                headers={'Content-Type': 'application/json'},
+                timeout=aiohttp.ClientTimeout(total=15),
+            ) as response:
+                if response.status >= 400:
+                    self.logger.warning(f'Webhook {url} returned status {response.status}')
+                    return None
+                else:
+                    self.logger.debug(f'Successfully pushed to webhook {url}')
+                    try:
+                        return await response.json()
+                    except Exception as json_error:
+                        self.logger.debug(f'Failed to parse JSON response from webhook {url}: {json_error}')
                         return None
-                    else:
-                        self.logger.debug(f'Successfully pushed to webhook {url}')
-                        try:
-                            return await response.json()
-                        except Exception as json_error:
-                            self.logger.debug(f'Failed to parse JSON response from webhook {url}: {json_error}')
-                            return None
         except asyncio.TimeoutError:
             self.logger.warning(f'Timeout pushing to webhook {url}')
             return None

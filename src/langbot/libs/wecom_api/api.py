@@ -4,6 +4,7 @@ import base64
 import binascii
 import httpx
 import traceback
+from urllib.parse import quote
 from quart import Quart
 import xml.etree.ElementTree as ET
 from typing import Callable, Dict, Any
@@ -22,13 +23,14 @@ class WecomClient:
         contacts_secret: str,
         logger: None,
         unified_mode: bool = False,
+        api_base_url: str = 'https://qyapi.weixin.qq.com/cgi-bin',
     ):
         self.corpid = corpid
         self.secret = secret
         self.access_token_for_contacts = ''
         self.token = token
         self.aes = EncodingAESKey
-        self.base_url = 'https://qyapi.weixin.qq.com/cgi-bin'
+        self.base_url = api_base_url
         self.access_token = ''
         self.secret_for_contacts = contacts_secret
         self.logger = logger
@@ -56,7 +58,7 @@ class WecomClient:
         return bool(self.access_token_for_contacts and self.access_token_for_contacts.strip())
 
     async def get_access_token(self, secret):
-        url = f'https://qyapi.weixin.qq.com/cgi-bin/gettoken?corpid={self.corpid}&corpsecret={secret}'
+        url = f'{self.base_url}/gettoken?corpid={self.corpid}&corpsecret={secret}'
         async with httpx.AsyncClient() as client:
             response = await client.get(url)
             data = response.json()
@@ -65,6 +67,31 @@ class WecomClient:
             else:
                 await self.logger.error(f'获取accesstoken失败:{response.json()}')
                 raise Exception(f'未获取access token: {data}')
+
+    async def get_user_info(self, userid: str) -> dict:
+        """
+        Get user information by user ID using the application secret.
+
+        Args:
+            userid: The user ID to look up.
+
+        Returns:
+            dict: User information including 'name' field.
+        """
+        if not await self.check_access_token():
+            self.access_token = await self.get_access_token(self.secret)
+
+        url = self.base_url + '/user/get?access_token=' + self.access_token + '&userid=' + quote(userid)
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url)
+            data = response.json()
+            if data.get('errcode') == 40014 or data.get('errcode') == 42001:
+                self.access_token = await self.get_access_token(self.secret)
+                return await self.get_user_info(userid)
+            if data.get('errcode', 0) != 0:
+                await self.logger.error(f'获取用户信息失败:{data}')
+                return {}
+            return data
 
     async def get_users(self):
         if not self.check_access_token_for_contacts():
@@ -196,7 +223,7 @@ class WecomClient:
             self.access_token = await self.get_access_token(self.secret)
 
         url = self.base_url + '/message/send?access_token=' + self.access_token
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=None) as client:
             params = {
                 'touser': user_id,
                 'msgtype': 'text',

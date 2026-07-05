@@ -33,11 +33,14 @@ class Controller:
 
                     for query in queries:
                         session = await self.ap.sess_mgr.get_session(query)
-                        self.ap.logger.debug(f'Checking query {query} session {session}')
+                        # Debug logging removed from tight loop to prevent excessive log generation
+                        # that can cause memory overflow in high-traffic scenarios
 
                         if not session._semaphore.locked():
                             selected_query = query
                             await session._semaphore.acquire()
+                            # Only log when actually selecting a query
+                            self.ap.logger.debug(f'Selected query {query.query_id} for processing')
 
                             break
 
@@ -60,6 +63,14 @@ class Controller:
                                 pipeline = await self.ap.pipeline_mgr.get_pipeline_by_uuid(pipeline_uuid)
                                 if pipeline:
                                     await pipeline.run(selected_query)
+                                else:
+                                    self.ap.logger.warning(
+                                        f'Pipeline {pipeline_uuid} not found for query {selected_query.query_id}, query dropped'
+                                    )
+                            else:
+                                self.ap.logger.warning(
+                                    f'No pipeline_uuid for query {selected_query.query_id}, query dropped'
+                                )
 
                         async with self.ap.query_pool:
                             (await self.ap.sess_mgr.get_session(selected_query))._semaphore.release()

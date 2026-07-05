@@ -1,6 +1,5 @@
 """Test plugin list filtering by component kinds."""
 
-from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock
 import pytest
 
@@ -8,7 +7,7 @@ import pytest
 @pytest.mark.asyncio
 async def test_plugin_list_filter_by_component_kinds():
     """Test that plugins can be filtered by component kinds."""
-    from src.langbot.pkg.plugin.connector import PluginRuntimeConnector
+    from langbot.pkg.plugin.connector import PluginRuntimeConnector
 
     # Mock the application
     mock_app = MagicMock()
@@ -31,16 +30,7 @@ async def test_plugin_list_filter_by_component_kinds():
                     }
                 }
             },
-            'components': [
-                {
-                    'manifest': {
-                        'manifest': {
-                            'kind': 'Tool',
-                            'metadata': {'name': 'tool1'}
-                        }
-                    }
-                }
-            ]
+            'components': [{'manifest': {'manifest': {'kind': 'Tool', 'metadata': {'name': 'tool1'}}}}],
         },
         {
             'debug': False,
@@ -48,20 +38,11 @@ async def test_plugin_list_filter_by_component_kinds():
                 'manifest': {
                     'metadata': {
                         'author': 'author2',
-                        'name': 'plugin_with_knowledge_retriever_only',
+                        'name': 'plugin_with_knowledge_engine_only',
                     }
                 }
             },
-            'components': [
-                {
-                    'manifest': {
-                        'manifest': {
-                            'kind': 'KnowledgeRetriever',
-                            'metadata': {'name': 'retriever1'}
-                        }
-                    }
-                }
-            ]
+            'components': [{'manifest': {'manifest': {'kind': 'KnowledgeEngine', 'metadata': {'name': 'retriever1'}}}}],
         },
         {
             'debug': False,
@@ -73,16 +54,7 @@ async def test_plugin_list_filter_by_component_kinds():
                     }
                 }
             },
-            'components': [
-                {
-                    'manifest': {
-                        'manifest': {
-                            'kind': 'Command',
-                            'metadata': {'name': 'cmd1'}
-                        }
-                    }
-                }
-            ]
+            'components': [{'manifest': {'manifest': {'kind': 'Command', 'metadata': {'name': 'cmd1'}}}}],
         },
         {
             'debug': False,
@@ -94,16 +66,7 @@ async def test_plugin_list_filter_by_component_kinds():
                     }
                 }
             },
-            'components': [
-                {
-                    'manifest': {
-                        'manifest': {
-                            'kind': 'EventListener',
-                            'metadata': {'name': 'listener1'}
-                        }
-                    }
-                }
-            ]
+            'components': [{'manifest': {'manifest': {'kind': 'EventListener', 'metadata': {'name': 'listener1'}}}}],
         },
         {
             'debug': False,
@@ -116,23 +79,9 @@ async def test_plugin_list_filter_by_component_kinds():
                 }
             },
             'components': [
-                {
-                    'manifest': {
-                        'manifest': {
-                            'kind': 'KnowledgeRetriever',
-                            'metadata': {'name': 'retriever2'}
-                        }
-                    }
-                },
-                {
-                    'manifest': {
-                        'manifest': {
-                            'kind': 'Tool',
-                            'metadata': {'name': 'tool2'}
-                        }
-                    }
-                }
-            ]
+                {'manifest': {'manifest': {'kind': 'KnowledgeEngine', 'metadata': {'name': 'retriever2'}}}},
+                {'manifest': {'manifest': {'kind': 'Tool', 'metadata': {'name': 'tool2'}}}},
+            ],
         },
     ]
 
@@ -157,14 +106,14 @@ async def test_plugin_list_filter_by_component_kinds():
     assert 'plugin_with_command' in plugin_names
     assert 'plugin_with_event_listener' in plugin_names
     assert 'plugin_with_mixed_components' in plugin_names
-    # Plugin with only KnowledgeRetriever should NOT be included
-    assert 'plugin_with_knowledge_retriever_only' not in plugin_names
+    # Plugin with only KnowledgeEngine should NOT be included
+    assert 'plugin_with_knowledge_engine_only' not in plugin_names
 
 
 @pytest.mark.asyncio
 async def test_plugin_list_filter_no_filter():
     """Test that all plugins are returned when no filter is specified."""
-    from src.langbot.pkg.plugin.connector import PluginRuntimeConnector
+    from langbot.pkg.plugin.connector import PluginRuntimeConnector
 
     # Mock the application
     mock_app = MagicMock()
@@ -187,16 +136,7 @@ async def test_plugin_list_filter_no_filter():
                     }
                 }
             },
-            'components': [
-                {
-                    'manifest': {
-                        'manifest': {
-                            'kind': 'Tool',
-                            'metadata': {'name': 'tool1'}
-                        }
-                    }
-                }
-            ]
+            'components': [{'manifest': {'manifest': {'kind': 'Tool', 'metadata': {'name': 'tool1'}}}}],
         },
         {
             'debug': False,
@@ -208,16 +148,7 @@ async def test_plugin_list_filter_no_filter():
                     }
                 }
             },
-            'components': [
-                {
-                    'manifest': {
-                        'manifest': {
-                            'kind': 'KnowledgeRetriever',
-                            'metadata': {'name': 'retriever1'}
-                        }
-                    }
-                }
-            ]
+            'components': [{'manifest': {'manifest': {'kind': 'KnowledgeEngine', 'metadata': {'name': 'retriever1'}}}}],
         },
     ]
 
@@ -243,7 +174,7 @@ async def test_plugin_list_filter_no_filter():
 @pytest.mark.asyncio
 async def test_plugin_list_filter_empty_result():
     """Test that empty list is returned when no plugins match the filter."""
-    from src.langbot.pkg.plugin.connector import PluginRuntimeConnector
+    from langbot.pkg.plugin.connector import PluginRuntimeConnector
 
     # Mock the application
     mock_app = MagicMock()
@@ -254,7 +185,7 @@ async def test_plugin_list_filter_empty_result():
     connector = PluginRuntimeConnector(mock_app, AsyncMock())
     connector.handler = MagicMock()
 
-    # Mock plugin data - only KnowledgeRetriever plugins
+    # Mock plugin data - only KnowledgeEngine plugins
     mock_plugins = [
         {
             'debug': False,
@@ -266,16 +197,7 @@ async def test_plugin_list_filter_empty_result():
                     }
                 }
             },
-            'components': [
-                {
-                    'manifest': {
-                        'manifest': {
-                            'kind': 'KnowledgeRetriever',
-                            'metadata': {'name': 'retriever1'}
-                        }
-                    }
-                }
-            ]
+            'components': [{'manifest': {'manifest': {'kind': 'KnowledgeEngine', 'metadata': {'name': 'retriever1'}}}}],
         },
     ]
 
@@ -298,7 +220,7 @@ async def test_plugin_list_filter_empty_result():
 @pytest.mark.asyncio
 async def test_plugin_list_filter_plugin_without_components():
     """Test that plugins without components are excluded when filtering."""
-    from src.langbot.pkg.plugin.connector import PluginRuntimeConnector
+    from langbot.pkg.plugin.connector import PluginRuntimeConnector
 
     # Mock the application
     mock_app = MagicMock()
@@ -321,16 +243,7 @@ async def test_plugin_list_filter_plugin_without_components():
                     }
                 }
             },
-            'components': [
-                {
-                    'manifest': {
-                        'manifest': {
-                            'kind': 'Tool',
-                            'metadata': {'name': 'tool1'}
-                        }
-                    }
-                }
-            ]
+            'components': [{'manifest': {'manifest': {'kind': 'Tool', 'metadata': {'name': 'tool1'}}}}],
         },
         {
             'debug': False,
@@ -342,7 +255,7 @@ async def test_plugin_list_filter_plugin_without_components():
                     }
                 }
             },
-            'components': []
+            'components': [],
         },
     ]
 

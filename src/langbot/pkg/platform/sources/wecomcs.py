@@ -2,6 +2,7 @@ from __future__ import annotations
 import typing
 import asyncio
 import traceback
+import uuid
 
 import datetime
 import pydantic
@@ -81,22 +82,33 @@ class WecomEventConverter(abstract_platform_adapter.AbstractEventConverter):
             return event.source_platform_object
 
     @staticmethod
-    async def target2yiri(event: WecomCSEvent):
+    async def target2yiri(event: WecomCSEvent, bot: WecomCSClient = None):
         """
         将 WecomEvent 转换为平台的 FriendMessage 对象。
 
         Args:
             event (WecomEvent): 企业微信客服事件。
+            bot (WecomCSClient): 企业微信客服客户端，用于获取用户信息。
 
         Returns:
             platform_events.FriendMessage: 转换后的 FriendMessage 对象。
         """
+        # Try to get customer nickname from WeChat API
+        nickname = str(event.user_id)
+        if bot and event.user_id:
+            try:
+                customer_info = await bot.get_customer_info(event.user_id)
+                if customer_info and customer_info.get('nickname'):
+                    nickname = customer_info.get('nickname')
+            except Exception:
+                pass  # Fall back to user_id as nickname
+
         # 转换消息链
         if event.type == 'text':
             yiri_chain = await WecomMessageConverter.target2yiri(event.message, event.message_id)
             friend = platform_entities.Friend(
                 id=f'u{event.user_id}',
-                nickname=str(event.user_id),
+                nickname=nickname,
                 remark='',
             )
 
@@ -106,7 +118,7 @@ class WecomEventConverter(abstract_platform_adapter.AbstractEventConverter):
         elif event.type == 'image':
             friend = platform_entities.Friend(
                 id=f'u{event.user_id}',
-                nickname=str(event.user_id),
+                nickname=nickname,
                 remark='',
             )
 
@@ -209,6 +221,7 @@ class WecomCSAdapter(abstract_platform_adapter.AbstractMessagePlatformAdapter):
             EncodingAESKey=config['EncodingAESKey'],
             logger=logger,
             unified_mode=True,
+            api_base_url=config.get('api_base_url', 'https://qyapi.weixin.qq.com/cgi-bin'),
         )
 
         super().__init__(
@@ -238,7 +251,28 @@ class WecomCSAdapter(abstract_platform_adapter.AbstractMessagePlatformAdapter):
                 )
 
     async def send_message(self, target_type: str, target_id: str, message: platform_message.MessageChain):
-        pass
+        if target_type != 'person':
+            raise ValueError('WeCom customer service only supports sending messages to person targets')
+
+        open_kfid = self.bot_account_id
+        external_userid = target_id
+        if '|' in target_id:
+            open_kfid, external_userid = target_id.split('|', 1)
+        if external_userid.startswith('u'):
+            external_userid = external_userid[1:]
+        if not open_kfid:
+            raise ValueError('WeCom customer service open_kfid is required before sending messages')
+
+        content_list = await WecomMessageConverter.yiri2target(message, self.bot)
+        for content in content_list:
+            msgid = f'langbot_{uuid.uuid4().hex}'
+            if content['type'] == 'text':
+                await self.bot.send_text_msg(
+                    open_kfid=open_kfid,
+                    external_userid=external_userid,
+                    msgid=msgid,
+                    content=content['content'],
+                )
 
     def set_bot_uuid(self, bot_uuid: str):
         """设置 bot UUID（用于生成 webhook URL）"""
@@ -254,7 +288,7 @@ class WecomCSAdapter(abstract_platform_adapter.AbstractMessagePlatformAdapter):
         async def on_message(event: WecomCSEvent):
             self.bot_account_id = event.receiver_id
             try:
-                return await callback(await self.event_converter.target2yiri(event), self)
+                return await callback(await self.event_converter.target2yiri(event, self.bot), self)
             except Exception:
                 await self.logger.error(f'Error in wecomcs callback: {traceback.format_exc()}')
 

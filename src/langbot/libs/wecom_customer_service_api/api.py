@@ -10,20 +10,34 @@ from typing import Callable
 from .wecomcsevent import WecomCSEvent
 import langbot_plugin.api.entities.builtin.platform.message as platform_message
 import aiofiles
+import time
 
 
 class WecomCSClient:
-    def __init__(self, corpid: str, secret: str, token: str, EncodingAESKey: str, logger: None, unified_mode: bool = False):
+    def __init__(
+        self,
+        corpid: str,
+        secret: str,
+        token: str,
+        EncodingAESKey: str,
+        logger: None,
+        unified_mode: bool = False,
+        api_base_url: str = 'https://qyapi.weixin.qq.com/cgi-bin',
+    ):
         self.corpid = corpid
         self.secret = secret
         self.access_token_for_contacts = ''
         self.token = token
         self.aes = EncodingAESKey
-        self.base_url = 'https://qyapi.weixin.qq.com/cgi-bin'
+        self.base_url = api_base_url
         self.access_token = ''
         self.logger = logger
         self.unified_mode = unified_mode
         self.app = Quart(__name__)
+
+        # Customer info cache: {external_userid: (info_dict, timestamp)}
+        self._customer_cache: dict[str, tuple[dict, float]] = {}
+        self._cache_ttl = 60  # Cache TTL in seconds (1 minute)
 
         # 只有在非统一模式下才注册独立路由
         if not self.unified_mode:
@@ -66,7 +80,7 @@ class WecomCSClient:
         return bool(self.access_token_for_contacts and self.access_token_for_contacts.strip())
 
     async def get_access_token(self, secret):
-        url = f'https://qyapi.weixin.qq.com/cgi-bin/gettoken?corpid={self.corpid}&corpsecret={secret}'
+        url = f'{self.base_url}/gettoken?corpid={self.corpid}&corpsecret={secret}'
         async with httpx.AsyncClient() as client:
             response = await client.get(url)
             data = response.json()
@@ -176,7 +190,7 @@ class WecomCSClient:
         if not await self.check_access_token():
             self.access_token = await self.get_access_token(self.secret)
 
-        url = f'https://qyapi.weixin.qq.com/cgi-bin/kf/send_msg?access_token={self.access_token}'
+        url = f'{self.base_url}/kf/send_msg?access_token={self.access_token}'
 
         payload = {
             'touser': external_userid,
@@ -378,3 +392,53 @@ class WecomCSClient:
     async def get_media_id(self, image: platform_message.Image):
         media_id = await self.upload_to_work(image=image)
         return media_id
+
+    async def get_customer_info(self, external_userid: str) -> dict | None:
+        """
+        Get customer information by external_userid with caching.
+
+        Uses a 1-minute cache to avoid repeated API calls for the same user.
+
+        Args:
+            external_userid: The external user ID of the customer.
+
+        Returns:
+            Customer info dict with 'nickname', 'avatar', etc., or None if not found.
+        """
+        # Check cache first
+        current_time = time.time()
+        if external_userid in self._customer_cache:
+            cached_info, cached_time = self._customer_cache[external_userid]
+            if current_time - cached_time < self._cache_ttl:
+                return cached_info
+
+        # Cache miss or expired, fetch from API
+        if not await self.check_access_token():
+            self.access_token = await self.get_access_token(self.secret)
+
+        url = f'{self.base_url}/kf/customer/batchget?access_token={self.access_token}'
+
+        payload = {
+            'external_userid_list': [external_userid],
+        }
+
+        async with httpx.AsyncClient() as client:
+            response = await client.post(url, json=payload)
+            data = response.json()
+
+            if data.get('errcode') in [40014, 42001]:
+                self.access_token = await self.get_access_token(self.secret)
+                return await self.get_customer_info(external_userid)
+
+            if data.get('errcode', 0) != 0:
+                if self.logger:
+                    await self.logger.warning(f'Failed to get customer info: {data}')
+                return None
+
+            customer_list = data.get('customer_list', [])
+            if customer_list:
+                customer_info = customer_list[0]
+                # Store in cache
+                self._customer_cache[external_userid] = (customer_info, current_time)
+                return customer_info
+            return None

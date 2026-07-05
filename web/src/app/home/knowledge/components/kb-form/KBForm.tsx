@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useTranslation } from 'react-i18next';
 import { Input } from '@/components/ui/input';
+import EmojiPicker from '@/components/ui/emoji-picker';
 import {
   Form,
   FormControl,
@@ -13,167 +15,383 @@ import {
   FormMessage,
   FormDescription,
 } from '@/components/ui/form';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
 import { httpClient } from '@/app/infra/http/HttpClient';
 import {
   Select,
   SelectContent,
-  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { KnowledgeBase, EmbeddingModel } from '@/app/infra/entities/api';
+import { KnowledgeBase, KnowledgeEngine } from '@/app/infra/entities/api';
+import { CustomApiError } from '@/app/infra/entities/common';
 import { toast } from 'sonner';
+import { extractI18nObject } from '@/i18n/I18nProvider';
+import DynamicFormComponent from '@/app/home/components/dynamic-form/DynamicFormComponent';
+import { IDynamicFormItemSchema } from '@/app/infra/entities/form/dynamic';
 import {
-  HoverCard,
-  HoverCardContent,
-  HoverCardTrigger,
-} from '@/components/ui/hover-card';
+  DynamicFormItemConfig,
+  getDefaultValues,
+  parseDynamicFormItemType,
+} from '@/app/home/components/dynamic-form/DynamicFormItemConfig';
+import { UUID } from 'uuidjs';
 
 const getFormSchema = (t: (key: string) => string) =>
   z.object({
     name: z.string().min(1, { message: t('knowledge.kbNameRequired') }),
-    description: z
+    description: z.string().optional(),
+    emoji: z.string().optional(),
+    ragEngineId: z
       .string()
-      .min(1, { message: t('knowledge.kbDescriptionRequired') }),
-    embeddingModelUUID: z
-      .string()
-      .min(1, { message: t('knowledge.embeddingModelUUIDRequired') }),
-    top_k: z
-      .number()
-      .min(1, { message: t('knowledge.topKRequired') })
-      .max(30, { message: t('knowledge.topKMax') }),
+      .min(1, { message: t('knowledge.knowledgeEngineRequired') }),
   });
+
+/**
+ * Parse creation schema from Knowledge Engine to IDynamicFormItemSchema[]
+ */
+function parseCreationSchema(
+  schemaItems: any | any[] | undefined,
+): IDynamicFormItemSchema[] {
+  if (!schemaItems) return [];
+  const items = Array.isArray(schemaItems) ? schemaItems : schemaItems.schema;
+  if (!items || !Array.isArray(items)) return [];
+
+  return items.map(
+    (item) =>
+      new DynamicFormItemConfig({
+        default: item.default,
+        id: UUID.generate(),
+        label: item.label,
+        description: item.description,
+        name: item.name,
+        required: item.required,
+        type: parseDynamicFormItemType(item.type),
+        options: item.options,
+        show_if: item.show_if,
+      }),
+  );
+}
 
 export default function KBForm({
   initKbId,
   onNewKbCreated,
   onKbUpdated,
+  onDirtyChange,
 }: {
   initKbId?: string;
   onNewKbCreated: (kbId: string) => void;
   onKbUpdated: (kbId: string) => void;
+  onDirtyChange?: (dirty: boolean) => void;
 }) {
   const { t } = useTranslation();
+  const [ragEngines, setRagEngines] = useState<KnowledgeEngine[]>([]);
+  const [selectedEngineId, setSelectedEngineId] = useState<string>('');
+  const [configSettings, setConfigSettings] = useState<Record<string, unknown>>(
+    {},
+  );
+  const [retrievalSettings, setRetrievalSettings] = useState<
+    Record<string, unknown>
+  >({});
+  const [isEditing, setIsEditing] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  // Dirty tracking: snapshot of saved state for comparison
+  const savedSnapshotRef = useRef<string>('');
+  const isInitializing = useRef(true);
+
+  // Refs to store validation functions from dynamic forms
+  const configValidateRef = useRef<(() => Promise<boolean>) | null>(null);
+  const retrievalValidateRef = useRef<(() => Promise<boolean>) | null>(null);
+
   const formSchema = getFormSchema(t);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       name: '',
-      description: t('knowledge.defaultDescription'),
-      embeddingModelUUID: '',
-      top_k: 5,
+      description: '',
+      emoji: '📚',
+      ragEngineId: '',
     },
   });
 
-  const [embeddingModels, setEmbeddingModels] = useState<EmbeddingModel[]>([]);
+  // Get selected engine details
+  const selectedEngine = ragEngines.find(
+    (e) => e.plugin_id === selectedEngineId,
+  );
+
+  // Dirty tracking: compare current form + dynamic settings against saved snapshot
+  const watchedFormValues = form.watch();
+  useEffect(() => {
+    if (!savedSnapshotRef.current || isInitializing.current) return;
+    const currentSnapshot = JSON.stringify({
+      form: watchedFormValues,
+      config: configSettings,
+      retrieval: retrievalSettings,
+    });
+    const dirty = currentSnapshot !== savedSnapshotRef.current;
+    onDirtyChange?.(dirty);
+  }, [watchedFormValues, configSettings, retrievalSettings, onDirtyChange]);
+
+  const captureSnapshot = () => {
+    savedSnapshotRef.current = JSON.stringify({
+      form: form.getValues(),
+      config: configSettings,
+      retrieval: retrievalSettings,
+    });
+  };
 
   useEffect(() => {
-    getEmbeddingModelNameList().then(() => {
+    loadRagEngines().then(() => {
       if (initKbId) {
-        getKbConfig(initKbId).then((val) => {
-          form.setValue('name', val.name);
-          form.setValue('description', val.description);
-          form.setValue('embeddingModelUUID', val.embeddingModelUUID);
-          form.setValue('top_k', val.top_k || 5);
-        });
+        loadKbConfig(initKbId);
       }
     });
   }, []);
 
-  const getKbConfig = async (
-    kbId: string,
-  ): Promise<z.infer<typeof formSchema>> => {
-    return new Promise((resolve) => {
-      httpClient.getKnowledgeBase(kbId).then((res) => {
-        resolve({
-          name: res.base.name,
-          description: res.base.description,
-          embeddingModelUUID: res.base.embedding_model_uuid,
-          top_k: res.base.top_k || 5,
-        });
+  // Auto-select first engine when engines are loaded and no selection
+  useEffect(() => {
+    if (ragEngines.length > 0 && !selectedEngineId && !isEditing) {
+      const firstEngine = ragEngines[0];
+      setSelectedEngineId(firstEngine.plugin_id);
+      form.setValue('ragEngineId', firstEngine.plugin_id);
+      const formItems = parseCreationSchema(firstEngine.creation_schema);
+      if (formItems.length > 0) {
+        setConfigSettings(getDefaultValues(formItems));
+      }
+      const retrievalItems = parseCreationSchema(firstEngine.retrieval_schema);
+      if (retrievalItems.length > 0) {
+        setRetrievalSettings(getDefaultValues(retrievalItems));
+      }
+    }
+  }, [ragEngines, selectedEngineId, isEditing]);
+
+  const loadRagEngines = async () => {
+    setLoading(true);
+    try {
+      const resp = await httpClient.getKnowledgeEngines();
+      setRagEngines(resp.engines);
+    } catch (err) {
+      console.error('Failed to load Knowledge Engines:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadKbConfig = async (kbId: string) => {
+    try {
+      isInitializing.current = true;
+      setIsEditing(true);
+
+      const res = await httpClient.getKnowledgeBase(kbId);
+      const kb = res.base;
+
+      const engineId = kb.knowledge_engine_plugin_id || '';
+      setSelectedEngineId(engineId);
+
+      form.reset({
+        name: kb.name,
+        description: kb.description,
+        emoji: kb.emoji || '📚',
+        ragEngineId: engineId,
       });
-    });
+
+      setConfigSettings(kb.creation_settings || {});
+      setRetrievalSettings(kb.retrieval_settings || {});
+
+      // Capture snapshot after a tick so dynamic forms have emitted initial values
+      setTimeout(() => {
+        captureSnapshot();
+        isInitializing.current = false;
+      }, 500);
+    } catch (err) {
+      console.error('Failed to load KB config:', err);
+      isInitializing.current = false;
+    }
   };
 
-  const getEmbeddingModelNameList = async () => {
-    const resp = await httpClient.getProviderEmbeddingModels();
-    setEmbeddingModels(resp.models);
+  const handleEngineChange = (engineId: string) => {
+    setSelectedEngineId(engineId);
+    form.setValue('ragEngineId', engineId);
+
+    const engine = ragEngines.find((e) => e.plugin_id === engineId);
+    if (engine) {
+      const formItems = parseCreationSchema(engine.creation_schema);
+      if (formItems.length > 0) {
+        setConfigSettings(getDefaultValues(formItems));
+      } else {
+        setConfigSettings({});
+      }
+      const retrievalItems = parseCreationSchema(engine.retrieval_schema);
+      if (retrievalItems.length > 0) {
+        setRetrievalSettings(getDefaultValues(retrievalItems));
+      } else {
+        setRetrievalSettings({});
+      }
+    }
   };
 
-  const onSubmit = (data: z.infer<typeof formSchema>) => {
+  const onSubmit = async (data: z.infer<typeof formSchema>) => {
+    // Validate dynamic forms before submission
+    if (configValidateRef.current) {
+      const configValid = await configValidateRef.current();
+      if (!configValid) {
+        toast.error(t('knowledge.engineSettingsInvalid'));
+        return;
+      }
+    }
+
+    if (retrievalValidateRef.current) {
+      const retrievalValid = await retrievalValidateRef.current();
+      if (!retrievalValid) {
+        toast.error(t('knowledge.retrievalSettingsInvalid'));
+        return;
+      }
+    }
+
+    const kbData: KnowledgeBase = {
+      name: data.name,
+      description: data.description ?? '',
+      emoji: data.emoji,
+      knowledge_engine_plugin_id: selectedEngineId,
+      creation_settings: configSettings,
+      retrieval_settings: retrievalSettings,
+    };
+
     if (initKbId) {
-      // update knowledge base
-      const updateKb: KnowledgeBase = {
-        name: data.name,
-        description: data.description,
-        embedding_model_uuid: data.embeddingModelUUID,
-        top_k: data.top_k,
-      };
       httpClient
-        .updateKnowledgeBase(initKbId, updateKb)
+        .updateKnowledgeBase(initKbId, kbData)
         .then((res) => {
+          captureSnapshot();
+          onDirtyChange?.(false);
           onKbUpdated(res.uuid);
           toast.success(t('knowledge.updateKnowledgeBaseSuccess'));
         })
         .catch((err) => {
           console.error('update knowledge base failed', err);
-          toast.error(t('knowledge.updateKnowledgeBaseFailed'));
+          toast.error(
+            t('knowledge.updateKnowledgeBaseFailed') +
+              (err as CustomApiError).msg,
+          );
         });
     } else {
-      // create knowledge base
-      const newKb: KnowledgeBase = {
-        name: data.name,
-        description: data.description,
-        embedding_model_uuid: data.embeddingModelUUID,
-        top_k: data.top_k,
-      };
       httpClient
-        .createKnowledgeBase(newKb)
+        .createKnowledgeBase(kbData)
         .then((res) => {
           onNewKbCreated(res.uuid);
         })
         .catch((err) => {
           console.error('create knowledge base failed', err);
+          toast.error(
+            t('knowledge.createKnowledgeBaseFailed') +
+              (err as CustomApiError).msg,
+          );
         });
     }
   };
 
-  return (
-    <>
-      <Form {...form}>
-        <form
-          onSubmit={form.handleSubmit(onSubmit)}
-          id="kb-form"
-          className="space-y-8"
+  const configFormItems = useMemo(
+    () => parseCreationSchema(selectedEngine?.creation_schema),
+    [selectedEngine?.creation_schema],
+  );
+
+  const retrievalFormItems = useMemo(
+    () => parseCreationSchema(selectedEngine?.retrieval_schema),
+    [selectedEngine?.retrieval_schema],
+  );
+
+  // Show loading state
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-8">
+        <p className="text-muted-foreground">{t('common.loading')}</p>
+      </div>
+    );
+  }
+
+  // Show message if no engines available
+  if (ragEngines.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-8 space-y-4">
+        <p className="text-muted-foreground">
+          {t('knowledge.noEnginesAvailable')}
+        </p>
+        <Link
+          to="/home/add-extension"
+          className="text-sm text-primary hover:underline"
         >
-          <div className="space-y-4">
-            <FormField
-              control={form.control}
-              name="name"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>
-                    {t('knowledge.kbName')}
-                    <span className="text-red-500">*</span>
-                  </FormLabel>
-                  <FormControl>
-                    <Input {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+          {t('knowledge.installEngineHint')}
+        </Link>
+      </div>
+    );
+  }
+
+  return (
+    <Form {...form}>
+      <form
+        onSubmit={form.handleSubmit(onSubmit)}
+        id="kb-form"
+        className="space-y-6"
+      >
+        {/* Card 1: Basic Information */}
+        <Card>
+          <CardHeader>
+            <CardTitle>{t('knowledge.basicInfo')}</CardTitle>
+            <CardDescription>
+              {t('knowledge.basicInfoDescription')}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Name and Emoji in same row */}
+            <div className="flex gap-4 items-start">
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem className="flex-1">
+                    <FormLabel>
+                      {t('knowledge.kbName')}
+                      <span className="text-destructive">*</span>
+                    </FormLabel>
+                    <FormControl>
+                      <Input {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="emoji"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('common.icon')}</FormLabel>
+                    <FormControl>
+                      <EmojiPicker
+                        value={field.value}
+                        onChange={field.onChange}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            {/* Description */}
             <FormField
               control={form.control}
               name="description"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>
-                    {t('knowledge.kbDescription')}
-                    <span className="text-red-500">*</span>
-                  </FormLabel>
+                  <FormLabel>{t('knowledge.kbDescription')}</FormLabel>
                   <FormControl>
                     <Input {...field} />
                   </FormControl>
@@ -181,154 +399,150 @@ export default function KBForm({
                 </FormItem>
               )}
             />
+
+            {/* Knowledge Engine Selector */}
             <FormField
               control={form.control}
-              name="embeddingModelUUID"
+              name="ragEngineId"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>
-                    {t('knowledge.embeddingModelUUID')}
-                    <span className="text-red-500">*</span>
+                    {t('knowledge.knowledgeEngine')}
+                    <span className="text-destructive">*</span>
                   </FormLabel>
                   <FormControl>
-                    <div className="relative">
-                      <Select
-                        disabled={!!initKbId}
-                        onValueChange={(value) => {
-                          field.onChange(value);
-                        }}
-                        value={field.value}
-                      >
-                        <SelectTrigger className="w-[180px] bg-[#ffffff] dark:bg-[#2a2a2e]">
+                    <Select
+                      disabled={isEditing}
+                      onValueChange={(value) => {
+                        field.onChange(value);
+                        handleEngineChange(value);
+                      }}
+                      value={field.value}
+                    >
+                      <SelectTrigger className="w-full bg-[#ffffff] dark:bg-[#2a2a2e]">
+                        {field.value ? (
+                          (() => {
+                            const [author, name] = field.value.split('/');
+                            const engine = ragEngines.find(
+                              (e) => e.plugin_id === field.value,
+                            );
+                            return (
+                              <div className="flex items-center gap-2">
+                                <img
+                                  src={httpClient.getPluginIconURL(
+                                    author,
+                                    name,
+                                  )}
+                                  alt=""
+                                  className="h-5 w-5 rounded"
+                                />
+                                <span>
+                                  {engine
+                                    ? extractI18nObject(engine.name)
+                                    : field.value}
+                                </span>
+                              </div>
+                            );
+                          })()
+                        ) : (
                           <SelectValue
-                            placeholder={t('knowledge.selectEmbeddingModel')}
+                            placeholder={t('knowledge.selectKnowledgeEngine')}
                           />
-                        </SelectTrigger>
-                        <SelectContent className="fixed z-[1000]">
-                          <SelectGroup>
-                            {embeddingModels.map((model) => (
-                              <HoverCard
-                                key={model.uuid}
-                                openDelay={0}
-                                closeDelay={0}
-                              >
-                                <HoverCardTrigger asChild>
-                                  <SelectItem value={model.uuid}>
-                                    {model.name}
-                                  </SelectItem>
-                                </HoverCardTrigger>
-                                <HoverCardContent
-                                  className="w-80 data-[state=open]:animate-none data-[state=closed]:animate-none"
-                                  align="end"
-                                  side="right"
-                                  sideOffset={10}
-                                >
-                                  <div className="space-y-2">
-                                    <div className="flex items-center gap-2">
-                                      <img
-                                        src={httpClient.getProviderRequesterIconURL(
-                                          model.requester,
-                                        )}
-                                        alt="icon"
-                                        className="w-8 h-8 rounded-[8%]"
-                                      />
-                                      <h4 className="font-medium">
-                                        {model.name}
-                                      </h4>
-                                    </div>
-                                    <p className="text-sm text-muted-foreground">
-                                      {model.description}
-                                    </p>
-                                    {model.requester_config && (
-                                      <div className="flex items-center gap-1 text-xs">
-                                        <svg
-                                          className="w-4 h-4 text-gray-500"
-                                          xmlns="http://www.w3.org/2000/svg"
-                                          viewBox="0 0 24 24"
-                                          fill="currentColor"
-                                        >
-                                          <path d="M13.0607 8.11097L14.4749 9.52518C17.2086 12.2589 17.2086 16.691 14.4749 19.4247L14.1214 19.7782C11.3877 22.5119 6.95555 22.5119 4.22188 19.7782C1.48821 17.0446 1.48821 12.6124 4.22188 9.87874L5.6361 11.293C3.68348 13.2456 3.68348 16.4114 5.6361 18.364C7.58872 20.3166 10.7545 20.3166 12.7072 18.364L13.0607 18.0105C15.0133 16.0578 15.0133 12.892 13.0607 10.9394L11.6465 9.52518L13.0607 8.11097ZM19.7782 14.1214L18.364 12.7072C20.3166 10.7545 20.3166 7.58872 18.364 5.6361C16.4114 3.68348 13.2456 3.68348 11.293 5.6361L10.9394 5.98965C8.98678 7.94227 8.98678 11.1081 10.9394 13.0607L12.3536 14.4749L10.9394 15.8891L9.52518 14.4749C6.79151 11.7413 6.79151 7.30911 9.52518 4.57544L9.87874 4.22188C12.6124 1.48821 17.0446 1.48821 19.7782 4.22188C22.5119 6.95555 22.5119 11.3877 19.7782 14.1214Z"></path>
-                                        </svg>
-                                        <span className="font-semibold">
-                                          Base URL：
-                                        </span>
-                                        {model.requester_config.base_url}
-                                      </div>
-                                    )}
-                                    {model.extra_args &&
-                                      Object.keys(model.extra_args).length >
-                                        0 && (
-                                        <div className="text-xs">
-                                          <div className="font-semibold mb-1">
-                                            {t('models.extraParameters')}
-                                          </div>
-                                          <div className="space-y-1">
-                                            {Object.entries(
-                                              model.extra_args as Record<
-                                                string,
-                                                unknown
-                                              >,
-                                            ).map(([key, value]) => (
-                                              <div
-                                                key={key}
-                                                className="flex items-center gap-1"
-                                              >
-                                                <span className="text-gray-500">
-                                                  {key}：
-                                                </span>
-                                                <span className="break-all">
-                                                  {JSON.stringify(value)}
-                                                </span>
-                                              </div>
-                                            ))}
-                                          </div>
-                                        </div>
-                                      )}
-                                  </div>
-                                </HoverCardContent>
-                              </HoverCard>
-                            ))}
-                          </SelectGroup>
-                        </SelectContent>
-                      </Select>
-                    </div>
+                        )}
+                      </SelectTrigger>
+                      <SelectContent className="fixed z-[1000]">
+                        {ragEngines.map((engine) => {
+                          const [author, name] = engine.plugin_id.split('/');
+                          return (
+                            <SelectItem
+                              key={engine.plugin_id}
+                              value={engine.plugin_id}
+                            >
+                              <div className="flex items-center gap-2">
+                                <img
+                                  src={httpClient.getPluginIconURL(
+                                    author,
+                                    name,
+                                  )}
+                                  alt=""
+                                  className="h-5 w-5 rounded"
+                                />
+                                <span>{extractI18nObject(engine.name)}</span>
+                              </div>
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
                   </FormControl>
-                  <FormDescription>
-                    {initKbId
-                      ? t('knowledge.cannotChangeEmbeddingModel')
-                      : t('knowledge.embeddingModelDescription')}
-                  </FormDescription>
+                  {selectedEngine?.description && (
+                    <FormDescription>
+                      {extractI18nObject(selectedEngine.description)}
+                    </FormDescription>
+                  )}
+                  {isEditing && (
+                    <FormDescription>
+                      {t('knowledge.cannotChangeKnowledgeEngine')}
+                    </FormDescription>
+                  )}
                   <FormMessage />
                 </FormItem>
               )}
             />
-            <FormField
-              control={form.control}
-              name="top_k"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>
-                    {t('knowledge.topK')}
-                    <span className="text-red-500">*</span>
-                  </FormLabel>
-                  <FormControl>
-                    <Input
-                      type="number"
-                      {...field}
-                      onChange={(e) => field.onChange(Number(e.target.value))}
-                      className="w-[180px] h-10 text-base appearance-none"
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    {t('knowledge.topKdescription')}
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </div>
-        </form>
-      </Form>
-    </>
+          </CardContent>
+        </Card>
+
+        {/* Card 2: Engine Settings (dynamic form from creation_schema) */}
+        {configFormItems.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>{t('knowledge.engineSettings')}</CardTitle>
+              <CardDescription>
+                {t('knowledge.engineSettingsDescription')}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <DynamicFormComponent
+                itemConfigList={configFormItems}
+                initialValues={configSettings as Record<string, object>}
+                onSubmit={(val) =>
+                  setConfigSettings(val as Record<string, unknown>)
+                }
+                isEditing={isEditing}
+                externalDependentValues={retrievalSettings}
+                onValidate={(validateFn) =>
+                  (configValidateRef.current = validateFn)
+                }
+              />
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Card 3: Retrieval Settings (dynamic form from retrieval_schema) */}
+        {retrievalFormItems.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>{t('knowledge.retrievalSettings')}</CardTitle>
+              <CardDescription>
+                {t('knowledge.retrievalSettingsDescription')}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <DynamicFormComponent
+                itemConfigList={retrievalFormItems}
+                initialValues={retrievalSettings as Record<string, object>}
+                onSubmit={(val) =>
+                  setRetrievalSettings(val as Record<string, unknown>)
+                }
+                externalDependentValues={configSettings}
+                onValidate={(validateFn) =>
+                  (retrievalValidateRef.current = validateFn)
+                }
+              />
+            </CardContent>
+          </Card>
+        )}
+      </form>
+    </Form>
   );
 }

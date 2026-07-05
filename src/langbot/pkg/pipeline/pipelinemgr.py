@@ -13,6 +13,7 @@ import langbot_plugin.api.entities.builtin.platform.message as platform_message
 import langbot_plugin.api.entities.builtin.platform.events as platform_events
 import langbot_plugin.api.entities.events as events
 from ..utils import importutil
+from .config_coercion import coerce_pipeline_config
 
 import langbot_plugin.api.entities.builtin.provider.session as provider_session
 import langbot_plugin.api.entities.builtin.pipeline.query as pipeline_query
@@ -95,6 +96,15 @@ class RuntimePipeline:
         extensions_prefs = pipeline_entity.extensions_preferences or {}
         self.enable_all_plugins = extensions_prefs.get('enable_all_plugins', True)
         self.enable_all_mcp_servers = extensions_prefs.get('enable_all_mcp_servers', True)
+        local_agent_config = (pipeline_entity.config or {}).get('ai', {}).get('local-agent', {})
+        self.mcp_resource_attachments = local_agent_config.get(
+            'mcp-resources',
+            extensions_prefs.get('mcp_resources', []),
+        )
+        self.mcp_resource_agent_read_enabled = local_agent_config.get(
+            'mcp-resource-agent-read-enabled',
+            extensions_prefs.get('mcp_resource_agent_read_enabled', True),
+        )
 
         if self.enable_all_plugins:
             # None indicates to use all available plugins
@@ -115,6 +125,27 @@ class RuntimePipeline:
         # Store bound plugins and MCP servers in query for filtering
         query.variables['_pipeline_bound_plugins'] = self.bound_plugins
         query.variables['_pipeline_bound_mcp_servers'] = self.bound_mcp_servers
+        query.variables['_pipeline_mcp_resource_attachments'] = self.mcp_resource_attachments
+        query.variables['_pipeline_mcp_resource_agent_read_enabled'] = self.mcp_resource_agent_read_enabled
+
+        # Record query start for monitoring
+        try:
+            # Get bot name from bot_uuid
+            bot_name = 'WebChat'
+            if query.bot_uuid:
+                try:
+                    bot = await self.ap.bot_service.get_bot(query.bot_uuid, include_secret=False)
+                    if bot:
+                        bot_name = bot.get('name', 'Unknown')
+                except Exception:
+                    pass
+
+            # Store for later use in process_query
+            query.variables['_monitoring_bot_name'] = bot_name
+            query.variables['_monitoring_pipeline_name'] = self.pipeline_entity.name
+        except Exception as e:
+            self.ap.logger.error(f'Failed to prepare monitoring data: {e}')
+
         await self.process_query(query)
 
     async def _check_output(self, query: pipeline_query.Query, result: pipeline_entities.StageProcessResult):
@@ -131,7 +162,7 @@ class RuntimePipeline:
                 query.message_event, platform_events.GroupMessage
             ):
                 result.user_notice.insert(0, platform_message.At(target=query.message_event.sender.id))
-            if await query.adapter.is_stream_output_supported():
+            if await query.adapter.is_stream_output_supported() and query.resp_messages:
                 await query.adapter.reply_message_chunk(
                     message_source=query.message_event,
                     bot_message=query.resp_messages[-1],
@@ -151,6 +182,37 @@ class RuntimePipeline:
             self.ap.logger.info(result.console_notice)
         if result.error_notice:
             self.ap.logger.error(result.error_notice)
+            # Mark query as having error
+            query.variables['_monitoring_has_error'] = True
+            # Record error to monitoring system
+            try:
+                bot_name = query.variables.get('_monitoring_bot_name', 'Unknown')
+                pipeline_name = query.variables.get('_monitoring_pipeline_name', 'Unknown')
+                message_id = query.variables.get('_monitoring_message_id', '')
+                session_id = f'{query.launcher_type.value if hasattr(query.launcher_type, "value") else query.launcher_type}_{query.launcher_id}'
+
+                # Update message status to error
+                if message_id:
+                    await self.ap.monitoring_service.update_message_status(
+                        message_id=message_id,
+                        status='error',
+                        level='error',
+                    )
+
+                # Record error log
+                await self.ap.monitoring_service.record_error(
+                    bot_id=query.bot_uuid or 'unknown',
+                    bot_name=bot_name,
+                    pipeline_id=self.pipeline_entity.uuid,
+                    pipeline_name=pipeline_name,
+                    error_type='PipelineError',
+                    error_message=result.error_notice,
+                    session_id=session_id,
+                    stack_trace=result.debug_notice if result.debug_notice else None,
+                    message_id=message_id,
+                )
+            except Exception as e:
+                self.ap.logger.error(f'Failed to record error to monitoring: {e}')
 
     async def _execute_from_stage(
         self,
@@ -221,6 +283,37 @@ class RuntimePipeline:
 
     async def process_query(self, query: pipeline_query.Query):
         """处理请求"""
+        # Get monitoring metadata
+        bot_name = query.variables.get('_monitoring_bot_name', 'Unknown')
+        pipeline_name = query.variables.get('_monitoring_pipeline_name', 'Unknown')
+
+        # Get runner name from pipeline config
+        runner_name = None
+        if query.pipeline_config and 'ai' in query.pipeline_config and 'runner' in query.pipeline_config['ai']:
+            runner_name = query.pipeline_config['ai']['runner'].get('runner')
+
+        # Record query start and store message_id
+        message_id = ''
+        try:
+            from . import monitoring_helper
+
+            message_id = await monitoring_helper.MonitoringHelper.record_query_start(
+                ap=self.ap,
+                query=query,
+                bot_id=query.bot_uuid or 'unknown',
+                bot_name=bot_name,
+                pipeline_id=self.pipeline_entity.uuid,
+                pipeline_name=pipeline_name,
+                runner_name=runner_name,
+            )
+            # Store message_id in query variables for LLM call monitoring
+            query.variables['_monitoring_message_id'] = message_id
+            # Notify adapter so it can map platform-specific IDs to monitoring message ID
+            if hasattr(query.adapter, 'on_monitoring_message_created'):
+                await query.adapter.on_monitoring_message_created(query, message_id)
+        except Exception as e:
+            self.ap.logger.error(f'Failed to record query start: {e}')
+
         try:
             # Get bound plugins for this pipeline
             bound_plugins = query.variables.get('_pipeline_bound_plugins', None)
@@ -244,15 +337,62 @@ class RuntimePipeline:
             event_ctx = await self.ap.plugin_connector.emit_event(event_obj, bound_plugins)
 
             if event_ctx.is_prevented_default():
+                self.ap.logger.debug(
+                    f'MessageReceived event prevented default for query {query.query_id}, pipeline={pipeline_name}'
+                )
                 return
 
             self.ap.logger.debug(f'Processing query {query.query_id}')
 
             await self._execute_from_stage(0, query)
+
+            # Record query success only if no error occurred during processing
+            if not query.variables.get('_monitoring_has_error', False):
+                try:
+                    await monitoring_helper.MonitoringHelper.record_query_success(
+                        ap=self.ap,
+                        message_id=message_id,
+                        query=query,
+                    )
+                except Exception as e:
+                    self.ap.logger.error(f'Failed to record query success: {e}')
+
+                # Record bot response message
+                try:
+                    await monitoring_helper.MonitoringHelper.record_query_response(
+                        ap=self.ap,
+                        query=query,
+                        bot_id=query.bot_uuid or 'unknown',
+                        bot_name=bot_name,
+                        pipeline_id=self.pipeline_entity.uuid,
+                        pipeline_name=pipeline_name,
+                        runner_name=runner_name,
+                    )
+                except Exception as e:
+                    self.ap.logger.error(f'Failed to record query response: {e}')
+
         except Exception as e:
             inst_name = query.current_stage_name if query.current_stage_name else 'unknown'
             self.ap.logger.error(f'Error processing query {query.query_id} stage={inst_name} : {e}')
             self.ap.logger.error(f'Traceback: {traceback.format_exc()}')
+
+            # Record query error
+            try:
+                from . import monitoring_helper
+
+                await monitoring_helper.MonitoringHelper.record_query_error(
+                    ap=self.ap,
+                    query=query,
+                    bot_id=query.bot_uuid or 'unknown',
+                    bot_name=bot_name,
+                    pipeline_id=self.pipeline_entity.uuid,
+                    pipeline_name=pipeline_name,
+                    error=e,
+                    runner_name=runner_name,
+                )
+            except Exception as me:
+                self.ap.logger.error(f'Failed to record query error: {me}')
+
         finally:
             self.ap.logger.debug(f'Query {query.query_id} processed')
             del self.ap.query_pool.cached_queries[query.query_id]
@@ -260,8 +400,6 @@ class RuntimePipeline:
 
 class PipelineManager:
     """流水线管理器"""
-
-    # ====== 4.0 ======
 
     ap: app.Application
 
@@ -299,6 +437,14 @@ class PipelineManager:
             pipeline_entity = persistence_pipeline.LegacyPipeline(**pipeline_entity._mapping)
         elif isinstance(pipeline_entity, dict):
             pipeline_entity = persistence_pipeline.LegacyPipeline(**pipeline_entity)
+
+        coerce_pipeline_config(
+            pipeline_entity.config,
+            getattr(self.ap, 'pipeline_config_meta_trigger', {'name': 'trigger', 'stages': []}),
+            getattr(self.ap, 'pipeline_config_meta_safety', {'name': 'safety', 'stages': []}),
+            getattr(self.ap, 'pipeline_config_meta_ai', {'name': 'ai', 'stages': []}),
+            getattr(self.ap, 'pipeline_config_meta_output', {'name': 'output', 'stages': []}),
+        )
 
         # initialize stage containers according to pipeline_entity.stages
         stage_containers: list[StageInstContainer] = []

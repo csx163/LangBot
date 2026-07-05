@@ -36,7 +36,12 @@ class WecomBotEvent(dict):
         """
         用户名称
         """
-        return self.get('username', '') or self.get('from', {}).get('alias', '') or self.get('from', {}).get('name', '') or self.userid
+        return (
+            self.get('username', '')
+            or self.get('from', {}).get('alias', '')
+            or self.get('from', {}).get('name', '')
+            or self.userid
+        )
 
     @property
     def chatname(self) -> str:
@@ -121,10 +126,31 @@ class WecomBotEvent(dict):
         消息id
         """
         return self.get('msgid', '')
-    
+
     @property
     def ai_bot_id(self) -> str:
         """
         AI Bot ID
         """
         return self.get('aibotid', '')
+
+    @property
+    def feedback_id(self) -> str:
+        """
+        反馈 ID，用于关联用户点赞/点踩反馈
+        """
+        return self.get('feedback_id', '')
+
+    @property
+    def stream_id(self) -> str:
+        """
+        流式消息 ID
+        """
+        return self.get('stream_id', '')
+
+    @property
+    def quote(self):
+        """
+        引用消息信息（群聊中用户引用其他消息时返回）
+        """
+        return self.get('quote', {})

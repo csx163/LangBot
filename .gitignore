@@ -42,14 +42,18 @@ botpy.log*
 test.py
 /web_ui
 .venv/
-uv.lock
 /test
 plugins.bak
 coverage.xml
 .coverage
 src/langbot/web/
+testsdk/
+.qa/
 
 # Build artifacts
 /dist
 /build
 *.egg-info
+
+# Next.js build cache (legacy)
+web/.next/

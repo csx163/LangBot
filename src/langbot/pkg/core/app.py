@@ -9,31 +9,42 @@ from ..platform import botmgr as im_mgr
 from ..platform.webhook_pusher import WebhookPusher
 from ..provider.session import sessionmgr as llm_session_mgr
 from ..provider.modelmgr import modelmgr as llm_model_mgr
+from ..box import service as box_service_module
+
 from langbot.pkg.provider.tools import toolmgr as llm_tool_mgr
 from ..config import manager as config_mgr
 from ..command import cmdmgr
 from ..plugin import connector as plugin_connector
 from ..pipeline import pool
 from ..pipeline import controller, pipelinemgr
+from ..pipeline import aggregator as message_aggregator
 from ..utils import version as version_mgr, proxy as proxy_mgr
 from ..persistence import mgr as persistencemgr
 from ..api.http.controller import main as http_controller
 from ..api.http.service import user as user_service
+from ..api.http.service import space as space_service
 from ..api.http.service import model as model_service
+from ..api.http.service import provider as provider_service
 from ..api.http.service import pipeline as pipeline_service
 from ..api.http.service import bot as bot_service
 from ..api.http.service import knowledge as knowledge_service
 from ..api.http.service import mcp as mcp_service
 from ..api.http.service import apikey as apikey_service
 from ..api.http.service import webhook as webhook_service
-from ..api.http.service import external_kb as external_kb_service
+from ..api.http.service import monitoring as monitoring_service
+from ..api.http.service import skill as skill_service
+from ..api.http.service import maintenance as maintenance_service
 from ..discover import engine as discover_engine
 from ..storage import mgr as storagemgr
 from ..utils import logcache
 from . import taskmgr
 from . import entities as core_entities
 from ..rag.knowledge import kbmgr as rag_mgr
+from ..rag.service import RAGRuntimeService
 from ..vector import mgr as vectordb_mgr
+from ..telemetry import telemetry as telemetry_module
+from ..survey import manager as survey_module
+from ..skill import manager as skill_mgr
 
 
 class Application:
@@ -57,9 +68,11 @@ class Application:
     model_mgr: llm_model_mgr.ModelManager = None
 
     rag_mgr: rag_mgr.RAGManager = None
+    rag_runtime_service: RAGRuntimeService = None
 
     # TODO move to pipeline
     tool_mgr: llm_tool_mgr.ToolManager = None
+    box_service: box_service_module.BoxService = None
 
     # ======= Config manager =======
 
@@ -75,6 +88,8 @@ class Application:
 
     instance_config: config_mgr.ConfigManager = None
 
+    instance_id: config_mgr.ConfigManager = None  # used to identify the instance
+
     # ======= Metadata config manager =======
 
     sensitive_meta: config_mgr.ConfigManager = None
@@ -89,6 +104,8 @@ class Application:
     plugin_connector: plugin_connector.PluginRuntimeConnector = None
 
     query_pool: pool.QueryPool = None
+
+    msg_aggregator: message_aggregator.MessageAggregator = None
 
     ctrl: controller.Controller = None
 
@@ -114,9 +131,15 @@ class Application:
 
     user_service: user_service.UserService = None
 
+    space_service: space_service.SpaceService = None
+
     llm_model_service: model_service.LLMModelsService = None
 
     embedding_models_service: model_service.EmbeddingModelsService = None
+
+    rerank_models_service: model_service.RerankModelsService = None
+
+    provider_service: provider_service.ModelProviderService = None
 
     pipeline_service: pipeline_service.PipelineService = None
 
@@ -124,13 +147,23 @@ class Application:
 
     knowledge_service: knowledge_service.KnowledgeService = None
 
-    external_kb_service: external_kb_service.ExternalKBService = None
-
     mcp_service: mcp_service.MCPService = None
 
     apikey_service: apikey_service.ApiKeyService = None
 
     webhook_service: webhook_service.WebhookService = None
+
+    telemetry: telemetry_module.TelemetryManager = None
+
+    survey: survey_module.SurveyManager = None
+
+    monitoring_service: monitoring_service.MonitoringService = None
+
+    skill_service: skill_service.SkillService = None
+
+    skill_mgr: skill_mgr.SkillManager = None
+
+    maintenance_service: maintenance_service.MaintenanceService = None
 
     def __init__(self):
         pass
@@ -167,6 +200,88 @@ class Application:
                 scopes=[core_entities.LifecycleControlScope.APPLICATION],
             )
 
+            # Telemetry instance heartbeat (startup + daily); respects
+            # space.disable_telemetry via TelemetryManager.send().
+            if self.telemetry is not None:
+                from ..telemetry import heartbeat as telemetry_heartbeat
+
+                self.task_mgr.create_task(
+                    telemetry_heartbeat.heartbeat_loop(self),
+                    name='telemetry-heartbeat',
+                    scopes=[core_entities.LifecycleControlScope.APPLICATION],
+                )
+
+            # Start monitoring data cleanup task if enabled
+            monitoring_cfg = self.instance_config.data.get('monitoring', {})
+            auto_cleanup_cfg = monitoring_cfg.get('auto_cleanup', {})
+            if auto_cleanup_cfg.get('enabled', True):
+                retention_days = self._get_positive_int_config(
+                    auto_cleanup_cfg.get('retention_days', 30),
+                    default=30,
+                    name='monitoring.auto_cleanup.retention_days',
+                )
+                delete_batch_size = self._get_positive_int_config(
+                    auto_cleanup_cfg.get('delete_batch_size', 1000),
+                    default=1000,
+                    name='monitoring.auto_cleanup.delete_batch_size',
+                )
+                check_interval_hours = self._get_positive_float_config(
+                    auto_cleanup_cfg.get('check_interval_hours', 1),
+                    default=1,
+                    name='monitoring.auto_cleanup.check_interval_hours',
+                )
+
+                async def monitoring_cleanup_loop():
+                    check_interval_seconds = check_interval_hours * 3600
+                    while True:
+                        try:
+                            deleted = await self.monitoring_service.cleanup_expired_records(
+                                retention_days,
+                                batch_size=delete_batch_size,
+                            )
+                            total_deleted = sum(deleted.values())
+                            if total_deleted > 0:
+                                self.logger.info(
+                                    f'Monitoring auto-cleanup: deleted {total_deleted} expired records '
+                                    f'(retention={retention_days}d): {deleted}'
+                                )
+                        except Exception as e:
+                            self.logger.warning(f'Monitoring auto-cleanup error: {e}')
+                        await asyncio.sleep(check_interval_seconds)
+
+                self.task_mgr.create_task(
+                    monitoring_cleanup_loop(),
+                    name='monitoring-cleanup',
+                    scopes=[core_entities.LifecycleControlScope.APPLICATION],
+                )
+
+            # Start storage/log maintenance task if enabled
+            storage_cleanup_cfg = self.instance_config.data.get('storage', {}).get('cleanup', {})
+            if storage_cleanup_cfg.get('enabled', True) and self.maintenance_service is not None:
+                check_interval_hours = self._get_positive_float_config(
+                    storage_cleanup_cfg.get('check_interval_hours', 1),
+                    default=1,
+                    name='storage.cleanup.check_interval_hours',
+                )
+
+                async def storage_cleanup_loop():
+                    check_interval_seconds = check_interval_hours * 3600
+                    while True:
+                        try:
+                            deleted = await self.maintenance_service.cleanup_expired_files()
+                            total_deleted = sum(deleted.values())
+                            if total_deleted > 0:
+                                self.logger.info(f'Storage maintenance: deleted expired files: {deleted}')
+                        except Exception as e:
+                            self.logger.warning(f'Storage maintenance error: {e}')
+                        await asyncio.sleep(check_interval_seconds)
+
+                self.task_mgr.create_task(
+                    storage_cleanup_loop(),
+                    name='storage-maintenance',
+                    scopes=[core_entities.LifecycleControlScope.APPLICATION],
+                )
+
             self.task_mgr.create_task(
                 never_ending(),
                 name='never-ending-task',
@@ -181,8 +296,33 @@ class Application:
             self.logger.error(f'Application runtime fatal exception: {e}')
             self.logger.debug(f'Traceback: {traceback.format_exc()}')
 
+    def _get_positive_int_config(self, value, default: int, name: str) -> int:
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            self.logger.warning(f'Invalid {name}: {value!r}, using {default}')
+            return default
+        if parsed < 1:
+            self.logger.warning(f'Invalid {name}: {value!r}, using {default}')
+            return default
+        return parsed
+
+    def _get_positive_float_config(self, value, default: float, name: str) -> float:
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError):
+            self.logger.warning(f'Invalid {name}: {value!r}, using {default}')
+            return default
+        if parsed <= 0:
+            self.logger.warning(f'Invalid {name}: {value!r}, using {default}')
+            return default
+        return parsed
+
     def dispose(self):
-        self.plugin_connector.dispose()
+        if self.plugin_connector is not None:
+            self.plugin_connector.dispose()
+        if self.box_service is not None:
+            self.box_service.dispose()
 
     async def print_web_access_info(self):
         """Print access webui tips"""

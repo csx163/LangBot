@@ -93,7 +93,7 @@ export abstract class BaseHttpClient {
         // 统一错误处理
         if (error.response) {
           const { status, data } = error.response;
-          const errMessage = data?.message || error.message;
+          const errMsg = (data as { msg?: string })?.msg || error.message;
 
           switch (status) {
             case 401:
@@ -105,23 +105,23 @@ export abstract class BaseHttpClient {
               }
               break;
             case 403:
-              console.error('Permission denied:', errMessage);
+              console.error('Permission denied:', errMsg);
               break;
             case 500:
-              console.error('Server error:', errMessage);
+              console.error('Server error:', errMsg);
               break;
           }
 
           return Promise.reject({
             code: data?.code || status,
-            message: errMessage,
+            msg: errMsg,
             data: data?.data || null,
           });
         }
 
         return Promise.reject({
           code: -1,
-          message: error.message || 'Network Error',
+          msg: error.message || 'Network Error',
           data: null,
         });
       },
@@ -147,7 +147,7 @@ export abstract class BaseHttpClient {
   // 错误处理
   protected handleError(error: object): never {
     if (axios.isCancel(error)) {
-      throw { code: -2, message: 'Request canceled', data: null };
+      throw { code: -2, msg: 'Request canceled', data: null };
     }
     throw error;
   }
@@ -205,5 +205,20 @@ export abstract class BaseHttpClient {
       },
       ...config,
     });
+  }
+
+  public async downloadFile(
+    url: string,
+    config?: RequestConfig,
+  ): Promise<AxiosResponse<Blob>> {
+    try {
+      const response = await this.instance.get<Blob>(url, {
+        responseType: 'blob',
+        ...config,
+      });
+      return response;
+    } catch (error) {
+      return this.handleError(error as object);
+    }
   }
 }

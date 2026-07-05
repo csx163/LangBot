@@ -1,146 +1,196 @@
 <p align="center">
 <a href="https://langbot.app">
-<img width="130" src="https://docs.langbot.app/langbot-logo.png" alt="LangBot"/>
+<img width="130" src="res/logo-blue.png" alt="LangBot"/>
 </a>
 
 <div align="center">
 
-<a href="https://www.producthunt.com/products/langbot?utm_source=badge-follow&utm_medium=badge&utm_source=badge-langbot" target="_blank"><img src="https://api.producthunt.com/widgets/embed-image/v1/follow.svg?product_id=1077185&theme=light" alt="LangBot - Production&#0045;grade&#0032;IM&#0032;bot&#0032;made&#0032;easy&#0046; | Product Hunt" style="width: 250px; height: 54px;" width="250" height="54" /></a>
+<a href="https://www.producthunt.com/products/langbot/launches/langbot?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-langbot" target="_blank" rel="noopener noreferrer"><img alt="LangBot - Easy-to-use global IM bot platform designed for the LLM era | Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=979554&amp;theme=light&amp;t=1782822143403"></a>
 
-<h3>Xây dựng, gỡ lỗi và triển khai bot IM nhanh chóng với LangBot.</h3>
+<h3>Nền tảng cấp sản xuất để xây dựng bot IM với AI agent.</h3>
+<h4>Xây dựng, gỡ lỗi và triển khai bot AI nhanh chóng trên Slack, Discord, Telegram, WeChat và nhiều nền tảng khác.</h4>
 
-[English](README_EN.md) / [简体中文](README.md) / [繁體中文](README_TW.md) / [日本語](README_JP.md) / [Español](README_ES.md) / [Français](README_FR.md) / [한국어](README_KO.md) / [Русский](README_RU.md) / Tiếng Việt
+[English](README.md) / [简体中文](README_CN.md) / [繁體中文](README_TW.md) / [日本語](README_JP.md) / [Español](README_ES.md) / [Français](README_FR.md) / [한국어](README_KO.md) / [Русский](README_RU.md) / Tiếng Việt
 
 [![Discord](https://img.shields.io/discord/1335141740050649118?logo=discord&labelColor=%20%235462eb&logoColor=%20%23f5f5f5&color=%20%235462eb)](https://discord.gg/wdNEHETs87)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/langbot-app/LangBot)
 [![GitHub release (latest by date)](https://img.shields.io/github/v/release/langbot-app/LangBot)](https://github.com/langbot-app/LangBot/releases/latest)
 <img src="https://img.shields.io/badge/python-3.10 ~ 3.13 -blue.svg" alt="python">
+[![GitHub stars](https://img.shields.io/github/stars/langbot-app/LangBot?style=social)](https://github.com/langbot-app/LangBot/stargazers)
 
 <a href="https://langbot.app">Trang chủ</a> ｜
-<a href="https://docs.langbot.app/en/insight/guide.html">Triển khai</a> ｜
-<a href="https://docs.langbot.app/en/plugin/plugin-intro.html">Plugin</a> ｜
-<a href="https://github.com/langbot-app/LangBot/issues/new?assignees=&labels=%E7%8B%AC%E7%AB%8B%E6%8F%92%E4%BB%B6&projects=&template=submit-plugin.yml&title=%5BPlugin%5D%3A+%E8%AF%B7%E6%B1%82%E7%99%BB%E8%AE%B0%E6%96%B0%E6%8F%92%E4%BB%B6">Gửi Plugin</a>
+<a href="https://link.langbot.app/en/docs/features">Tính năng</a> ｜
+<a href="https://link.langbot.app/en/docs/guide">Tài liệu</a> ｜
+<a href="https://link.langbot.app/en/docs/api">API</a> ｜
+<a href="https://space.langbot.app">Chợ Plugin</a> ｜
+<a href="https://langbot.featurebase.app/roadmap">Lộ trình</a>
 
 </div>
 
 </p>
 
-## 📦 Bắt đầu
+---
 
-#### Khởi động Nhanh
+## LangBot là gì?
 
-Sử dụng `uvx` để khởi động bằng một lệnh (cần cài đặt [uv](https://docs.astral.sh/uv/getting-started/installation/)):
+LangBot là một **nền tảng mã nguồn mở, cấp sản xuất** để xây dựng bot nhắn tin tức thời được hỗ trợ bởi AI. Nó kết nối các Mô hình Ngôn ngữ Lớn (LLM) với bất kỳ nền tảng chat nào, cho phép bạn tạo các agent thông minh có thể trò chuyện, thực hiện tác vụ và tích hợp với quy trình làm việc hiện có của bạn.
 
-```bash
-uvx langbot
-```
+<p align="center">
+<img src="res/dashboard-overview.png" alt="Bảng điều khiển quản lý web LangBot — giám sát thời gian thực khối lượng tin nhắn, lệnh gọi mô hình, tỷ lệ thành công và phiên hoạt động" width="720"/>
+</p>
 
-Truy cập http://localhost:5300 để bắt đầu sử dụng.
+### Khả năng chính
 
-#### Triển khai Docker Compose
+- **Hội thoại AI & Agent** — Đối thoại nhiều lượt, gọi công cụ, hỗ trợ đa phương thức, đầu ra streaming. RAG (cơ sở kiến thức) tích hợp sẵn với tích hợp sâu vào [Dify](https://dify.ai), [Coze](https://coze.com), [n8n](https://n8n.io), [Langflow](https://langflow.org), [Deerflow](https://deerflow.tech), [Weknora](https://weknora.weixin.qq.com).
+- **Hỗ trợ đa nền tảng IM** — Một mã nguồn cho Discord, Telegram, Slack, LINE, QQ, WeChat, WeCom, Lark, DingTalk, KOOK.
+- **Sẵn sàng cho sản xuất** — Kiểm soát truy cập, giới hạn tốc độ, lọc từ nhạy cảm, giám sát toàn diện và xử lý ngoại lệ. Được doanh nghiệp tin dùng.
+- **Hệ sinh thái Plugin** — Hàng trăm plugin, kiến trúc hướng sự kiện, mở rộng thành phần, và hỗ trợ [giao thức MCP](https://modelcontextprotocol.io/).
+- **Bảng quản lý Web** — Cấu hình, quản lý và giám sát bot thông qua giao diện trình duyệt trực quan. Không cần chỉnh sửa YAML.
+- **Kiến trúc đa Pipeline** — Các bot khác nhau cho các kịch bản khác nhau, với giám sát toàn diện và xử lý ngoại lệ.
 
-```bash
-git clone https://github.com/langbot-app/LangBot
-cd LangBot/docker
-docker compose up -d
-```
+[→ Tìm hiểu thêm về tất cả tính năng](https://link.langbot.app/en/docs/features)
 
-Truy cập http://localhost:5300 để bắt đầu sử dụng.
+📍 Hướng dẫn thực hành: [triển khai bot AI đa nền tảng trong 5 phút](https://blog.langbot.app/en/blog/deploy-ai-bot-in-5-minutes/), [kết nối DeepSeek với WeChat, Discord và Telegram](https://blog.langbot.app/en/blog/connect-deepseek-to-wechat/), [chạy Dify Agent trên Discord, Telegram và Slack](https://blog.langbot.app/en/blog/dify-agent-discord-telegram-slack/) và [xây dựng chatbot với n8n](https://blog.langbot.app/en/blog/n8n-multi-platform-ai-chatbot/).
 
-Tài liệu chi tiết [Triển khai Docker](https://docs.langbot.app/en/deploy/langbot/docker.html).
-
-#### Triển khai Một cú nhấp chuột trên BTPanel
-
-LangBot đã được liệt kê trên BTPanel. Nếu bạn đã cài đặt BTPanel, bạn có thể sử dụng [tài liệu](https://docs.langbot.app/en/deploy/langbot/one-click/bt.html) để sử dụng nó.
-
-#### Triển khai Cloud Zeabur
-
-Mẫu Zeabur được đóng góp bởi cộng đồng.
-
-[![Deploy on Zeabur](https://zeabur.com/button.svg)](https://zeabur.com/en-US/templates/ZKTBDH)
-
-#### Triển khai Cloud Railway
-
-[![Deploy on Railway](https://railway.com/button.svg)](https://railway.app/template/yRrAyL?referralCode=vogKPF)
-
-#### Các Phương pháp Triển khai Khác
-
-Sử dụng trực tiếp phiên bản phát hành để chạy, xem tài liệu [Triển khai Thủ công](https://docs.langbot.app/en/deploy/langbot/manual.html).
-
-#### Triển khai Kubernetes
-
-Tham khảo tài liệu [Triển khai Kubernetes](./docker/README_K8S.md).
+---
 
 ## 😎 Cập nhật Mới nhất
 
 Nhấp vào các nút Star và Watch ở góc trên bên phải của kho lưu trữ để nhận các bản cập nhật mới nhất.
 
-![star gif](https://docs.langbot.app/star.gif)
+![star gif](https://langbot.app/star.gif)
 
-## ✨ Tính năng
+## Bắt đầu nhanh
 
-<img width="500" src="https://docs.langbot.app/ui/bot-page-en-rounded.png" />
+### ☁️ LangBot Cloud (Khuyên dùng)
 
+**[LangBot Cloud](https://space.langbot.app/cloud)** — Không cần triển khai, sẵn sàng sử dụng.
 
-- 💬 Chat với LLM / Agent: Hỗ trợ nhiều LLM, thích ứng với chat nhóm và chat riêng tư; Hỗ trợ các cuộc trò chuyện nhiều vòng, gọi công cụ, khả năng đa phương thức và đầu ra streaming. Triển khai RAG (cơ sở kiến thức) tích hợp sẵn và tích hợp sâu với [Dify](https://dify.ai), [Coze](https://coze.com), [n8n](https://n8n.io) v.v. LLMOps platforms.
-- 🤖 Hỗ trợ Đa nền tảng: Hiện hỗ trợ QQ, QQ Channel, WeCom, WeChat cá nhân, Lark, DingTalk, Discord, Telegram, KOOK, Slack, LINE, v.v.
-- 🛠️ Độ ổn định Cao, Tính năng Phong phú: Kiểm soát truy cập gốc, giới hạn tốc độ, lọc từ nhạy cảm, v.v.; Dễ sử dụng, hỗ trợ nhiều phương pháp triển khai. Hỗ trợ nhiều cấu hình pipeline, các bot khác nhau cho các kịch bản khác nhau.
-- 🧩 Mở rộng Plugin, Cộng đồng Hoạt động: Hỗ trợ các cơ chế plugin hướng sự kiện, mở rộng thành phần, v.v.; Tích hợp giao thức [MCP](https://modelcontextprotocol.io/) của Anthropic; Hiện có hàng trăng plugin.
-- 😻 Giao diện Web: Hỗ trợ quản lý các phiên bản LangBot thông qua trình duyệt. Không cần viết tệp cấu hình thủ công.
+### Khởi chạy một dòng
 
-Để biết thêm thông số kỹ thuật chi tiết, vui lòng tham khảo [tài liệu](https://docs.langbot.app/en/insight/features.html).
+```bash
+uvx langbot
+```
 
-Hoặc truy cập môi trường demo: https://demo.langbot.dev/
-  - Thông tin đăng nhập: Email: `demo@langbot.app` Mật khẩu: `langbot123456`
-  - Lưu ý: Chỉ dành cho demo WebUI, vui lòng không nhập bất kỳ thông tin nhạy cảm nào trong môi trường công cộng.
+> Yêu cầu [uv](https://docs.astral.sh/uv/getting-started/installation/). Truy cập http://localhost:5300 — xong.
 
-### Nền tảng Nhắn tin
+### Docker Compose
+
+```bash
+git clone https://github.com/langbot-app/LangBot
+cd LangBot/docker
+docker compose --profile all up -d
+```
+
+### Triển khai đám mây một cú nhấp
+
+[![Deploy on Zeabur](https://zeabur.com/button.svg)](https://zeabur.com/en-US/templates/ZKTBDH)
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.app/template/yRrAyL?referralCode=vogKPF)
+
+**Thêm tùy chọn:** [Docker](https://link.langbot.app/en/docs/docker) · [Thủ công](https://link.langbot.app/en/docs/manual-deploy) · [BTPanel](https://link.langbot.app/en/docs/bt-panel) · [Kubernetes](https://docs.langbot.app/en/deploy/langbot/kubernetes)
+
+---
+
+## Nền tảng được hỗ trợ
 
 | Nền tảng | Trạng thái | Ghi chú |
-| --- | --- | --- |
-| Discord | ✅ |  |
-| Telegram | ✅ |  |
-| Slack | ✅ |  |
-| LINE | ✅ |  |
-| QQ Cá nhân | ✅ |  |
-| QQ API Chính thức | ✅ |  |
-| WeCom | ✅ |  |
-| WeComCS | ✅ |  |
-| WeCom AI Bot | ✅ |  |
-| WeChat Cá nhân | ✅ |  |
-| KOOK | ✅ |  |
-| Lark | ✅ |  |
-| DingTalk | ✅ |  |
+|----------|--------|-------|
+| Discord | ✅ | Chính thức |
+| Telegram | ✅ | Chính thức |
+| Slack | ✅ | Chính thức |
+| LINE | ✅ | Chính thức |
+| QQ | ✅ | Cá nhân & API chính thức (Kênh, DM, Nhóm) |
+| WeCom | ✅ | WeChat doanh nghiệp, CS bên ngoài, AI Bot |
+| WeChat | ✅ | Cá nhân & Tài khoản công khai |
+| Lark | ✅ | Chính thức |
+| DingTalk | ✅ | Chính thức |
+| KOOK | ✅ | Chính thức |
+| Satori | ✅ |  |
+| Email | ✅ | Matrix, Satori |
+| Matrix | ✅ | Hỗ trợ nhiều nền tảng qua bridge như Signal, WhatsApp, Messenger, iMessage, Mattermost, Google Chat, IRC, XMPP, Zulip và hơn thế nữa |
 
-### LLMs
+---
 
-| LLM | Trạng thái | Ghi chú |
-| --- | --- | --- |
-| [OpenAI](https://platform.openai.com/) | ✅ | Có sẵn cho bất kỳ mô hình định dạng giao diện OpenAI nào |
-| [DeepSeek](https://www.deepseek.com/) | ✅ |  |
-| [Moonshot](https://www.moonshot.cn/) | ✅ |  |
-| [Anthropic](https://www.anthropic.com/) | ✅ |  |
-| [xAI](https://x.ai/) | ✅ |  |
-| [Zhipu AI](https://open.bigmodel.cn/) | ✅ |  |
-| [CompShare](https://www.compshare.cn/?ytag=GPU_YY-gh_langbot) | ✅ | Nền tảng tài nguyên LLM và GPU |
-| [PPIO](https://ppinfra.com/user/register?invited_by=QJKFYD&utm_source=github_langbot) | ✅ | Nền tảng tài nguyên LLM và GPU |
-| [接口 AI](https://jiekou.ai/) | ✅ | Nền tảng tổng hợp LLM |
-| [ShengSuanYun](https://www.shengsuanyun.com/?from=CH_KYIPP758) | ✅ | Nền tảng tài nguyên LLM và GPU |
-| [302.AI](https://share.302.ai/SuTG99) | ✅ | Cổng LLM (MaaS) |
-| [Google Gemini](https://aistudio.google.com/prompts/new_chat) | ✅ | |
-| [Dify](https://dify.ai) | ✅ | Nền tảng LLMOps |
-| [Ollama](https://ollama.com/) | ✅ | Nền tảng chạy LLM cục bộ |
-| [LMStudio](https://lmstudio.ai/) | ✅ | Nền tảng chạy LLM cục bộ |
-| [GiteeAI](https://ai.gitee.com/) | ✅ | Cổng giao diện LLM (MaaS) |
-| [SiliconFlow](https://siliconflow.cn/) | ✅ | Cổng LLM (MaaS) |
-| [Aliyun Bailian](https://bailian.console.aliyun.com/) | ✅ | Cổng LLM (MaaS), nền tảng LLMOps |
-| [Volc Engine Ark](https://console.volcengine.com/ark/region:ark+cn-beijing/model?vendor=Bytedance&view=LIST_VIEW) | ✅ | Cổng LLM (MaaS), nền tảng LLMOps |
-| [ModelScope](https://modelscope.cn/docs/model-service/API-Inference/intro) | ✅ | Cổng LLM (MaaS) |
-| [MCP](https://modelcontextprotocol.io/) | ✅ | Hỗ trợ truy cập công cụ qua giao thức MCP |
+## LLM và tích hợp được hỗ trợ
 
-## 🤝 Đóng góp Cộng đồng
+| Nhà cung cấp | Loại | Trạng thái |
+|----------|------|--------|
+| [OpenAI](https://platform.openai.com/) | LLM | ✅ |
+| [Anthropic](https://www.anthropic.com/) | LLM | ✅ |
+| [DeepSeek](https://www.deepseek.com/) | LLM | ✅ |
+| [Google Gemini](https://aistudio.google.com/prompts/new_chat) | LLM | ✅ |
+| [xAI](https://x.ai/) | LLM | ✅ |
+| [Moonshot](https://www.moonshot.cn/) | LLM | ✅ |
+| [Zhipu AI](https://open.bigmodel.cn/) | LLM | ✅ |
+| [Ollama](https://ollama.com/) | LLM cục bộ | ✅ |
+| [LM Studio](https://lmstudio.ai/) | LLM cục bộ | ✅ |
+| [Dify](https://dify.ai) | LLMOps | ✅ |
+| [MCP](https://modelcontextprotocol.io/) | Giao thức | ✅ |
+| [SiliconFlow](https://siliconflow.cn/) | Cổng | ✅ |
+| [Aliyun Bailian](https://bailian.console.aliyun.com/) | Cổng | ✅ |
+| [Volc Engine Ark](https://console.volcengine.com/ark/region:ark+cn-beijing/model?vendor=Bytedance&view=LIST_VIEW) | Cổng | ✅ |
+| [ModelScope](https://modelscope.cn/docs/model-service/API-Inference/intro) | Cổng | ✅ |
+| [GiteeAI](https://ai.gitee.com/) | Cổng | ✅ |
+| [CompShare](https://www.compshare.cn/?ytag=GPU_YY-gh_langbot) | Nền tảng GPU | ✅ |
+| [PPIO](https://ppinfra.com/user/register?invited_by=QJKFYD&utm_source=github_langbot) | Nền tảng GPU | ✅ |
+| [ShengSuanYun](https://www.shengsuanyun.com/?from=CH_KYIPP758) | Nền tảng GPU | ✅ |
+| [接口 AI](https://jiekou.ai/) | Cổng | ✅ |
+| [302.AI](https://share.302ai.cn/SuTG99) | Cổng | ✅ |
+| [Qiniu](https://www.qiniu.com/ai/agent) | Cổng | ✅ |
 
-Cảm ơn các [người đóng góp mã](https://github.com/langbot-app/LangBot/graphs/contributors) sau đây và các thành viên khác trong cộng đồng vì những đóng góp của họ cho LangBot:
+[→ Xem tất cả tích hợp](https://link.langbot.app/en/docs/features)
+
+---
+
+## Tại sao chọn LangBot?
+
+| Trường hợp sử dụng | LangBot giúp như thế nào |
+|----------|-------------------|
+| **Hỗ trợ khách hàng** | Triển khai agent AI trên Slack/Discord/Telegram để trả lời câu hỏi bằng cơ sở kiến thức của bạn |
+| **Công cụ nội bộ** | Kết nối quy trình n8n/Dify với WeCom/DingTalk để tự động hóa quy trình kinh doanh |
+| **Quản lý cộng đồng** | Quản lý nhóm QQ/Discord với tính năng lọc nội dung và tương tác được hỗ trợ bởi AI |
+| **Đa nền tảng** | Một bot, tất cả nền tảng. Quản lý từ một bảng điều khiển duy nhất |
+
+---
+
+## Demo trực tuyến
+
+**Thử ngay:** https://demo.langbot.dev/
+- Email: `demo@langbot.app`
+- Mật khẩu: `langbot123456`
+
+*Lưu ý: Môi trường demo công khai. Không nhập thông tin nhạy cảm.*
+
+## Được xây dựng cho AI Agent 🤖
+
+LangBot **thân thiện với agent ngay từ thiết kế** —— các coding agent của bạn (Claude Code, Codex, Copilot, Cursor, …) có thể vận hành, mở rộng và triển khai LangBot với sự hỗ trợ hạng nhất:
+
+- **MCP Server** —— LangBot cung cấp endpoint [Model Context Protocol](https://modelcontextprotocol.io/) tích hợp tại `/mcp`, phản chiếu HTTP API để agent quản lý bot, pipeline, plugin và model theo cách lập trình. Xác thực bằng cùng một API key (đặt key toàn cục trong `config.yaml` hoặc dùng key theo người dùng) —— không cần luồng đăng nhập. Cấu hình tại tab **API & MCP** trong bảng điều khiển Web.
+- **Skills trong repo** —— Thư mục [`skills/`](skills/) là **nguồn sự thật duy nhất** để làm việc với LangBot: phát triển plugin, phát triển core, kiểm thử end-to-end, triển khai và vận hành MCP Server của LangBot / LangBot Space. Trỏ agent của bạn vào thư mục này và nó sẽ biết cách xây dựng.
+- **AGENTS.md** —— Mỗi repo đều có [`AGENTS.md`](AGENTS.md) (liên kết tượng trưng tới `CLAUDE.md`) mô tả kiến trúc, quy ước và quy tắc rằng thay đổi API phải giữ MCP Server và skills đồng bộ.
+- **`llms.txt`** —— Ngữ cảnh dự án có thể đọc bằng máy dành cho LLM được công bố trên website.
+
+> **Cloud / Marketplace:** [LangBot Space](https://space.langbot.app) cũng cung cấp MCP Server để agent tìm kiếm và kiểm tra marketplace plugin / MCP / skill, xác thực bằng Personal Access Token.
+
+---
+
+## Cộng đồng
+
+[![Discord](https://img.shields.io/discord/1335141740050649118?logo=discord&label=Discord)](https://discord.gg/wdNEHETs87)
+
+- [Cộng đồng Discord](https://discord.gg/wdNEHETs87)
+
+---
+
+## Lịch sử Star
+
+[![Star History Chart](https://api.star-history.com/svg?repos=langbot-app/LangBot&type=Date)](https://star-history.com/#langbot-app/LangBot&Date)
+
+---
+
+## Người đóng góp
+
+Cảm ơn tất cả [người đóng góp](https://github.com/langbot-app/LangBot/graphs/contributors) đã giúp LangBot trở nên tốt hơn:
 
 <a href="https://github.com/langbot-app/LangBot/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=langbot-app/LangBot" />

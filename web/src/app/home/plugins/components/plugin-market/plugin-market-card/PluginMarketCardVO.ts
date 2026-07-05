@@ -9,6 +9,8 @@ export interface IPluginMarketCardVO {
   githubURL: string;
   version: string;
   components?: Record<string, number>;
+  tags?: string[];
+  type?: 'plugin' | 'mcp' | 'skill';
 }
 
 export class PluginMarketCardVO implements IPluginMarketCardVO {
@@ -22,6 +24,8 @@ export class PluginMarketCardVO implements IPluginMarketCardVO {
   installCount: number;
   version: string;
   components?: Record<string, number>;
+  tags?: string[];
+  type?: 'plugin' | 'mcp' | 'skill';
 
   constructor(prop: IPluginMarketCardVO) {
     this.description = prop.description;
@@ -34,5 +38,7 @@ export class PluginMarketCardVO implements IPluginMarketCardVO {
     this.pluginId = prop.pluginId;
     this.version = prop.version;
     this.components = prop.components;
+    this.tags = prop.tags;
+    this.type = prop.type;
   }
 }

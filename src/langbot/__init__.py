@@ -1,3 +1,5 @@
-"""LangBot - Easy-to-use global IM bot platform designed for LLM era"""
+"""LangBot - Production-grade platform for building agentic IM bots"""
 
-__version__ = '4.6.4'
+from importlib.metadata import version
+
+__version__ = version('langbot')

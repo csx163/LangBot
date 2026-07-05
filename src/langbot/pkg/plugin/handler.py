@@ -26,6 +26,29 @@ from ..core import app
 from ..utils import constants
 
 
+class _RawAction:
+    def __init__(self, value: str):
+        self.value = value
+
+
+def _langbot_to_runtime_action(enum_name: str, fallback_value: str) -> Any:
+    return getattr(LangBotToRuntimeAction, enum_name, _RawAction(fallback_value))
+
+
+def _make_rag_error_response(error: Exception, error_type: str, **extra_context) -> handler.ActionResponse:
+    """Create a clean error response for RAG operations.
+
+    Args:
+        error: The caught exception.
+        error_type: A category string like 'EmbeddingError', 'VectorStoreError'.
+        **extra_context: Additional context fields for the error message.
+    """
+    context_parts = [f'{k}={v}' for k, v in extra_context.items()]
+    context_str = f' [{", ".join(context_parts)}]' if context_parts else ''
+    message = f'[{error_type}/{type(error).__name__}]{context_str} {str(error)}'
+    return handler.ActionResponse.error(message=message)
+
+
 class RuntimeConnectionHandler(handler.Handler):
     """Runtime connection handler"""
 
@@ -279,6 +302,7 @@ class RuntimeConnectionHandler(handler.Handler):
             target_id = data['target_id']
             message_chain = data['message_chain']
 
+            # Use custom deserializer that properly handles Forward messages
             message_chain_obj = platform_message.MessageChain.model_validate(message_chain)
 
             bot = await self.ap.platform_mgr.get_bot_by_uuid(bot_uuid)
@@ -299,11 +323,11 @@ class RuntimeConnectionHandler(handler.Handler):
 
         @self.action(PluginToRuntimeAction.GET_LLM_MODELS)
         async def get_llm_models(data: dict[str, Any]) -> handler.ActionResponse:
-            """Get llm models"""
+            """Get llm models, returns list of UUID strings"""
             llm_models = await self.ap.llm_model_service.get_llm_models(include_secret=False)
             return handler.ActionResponse.success(
                 data={
-                    'llm_models': llm_models,
+                    'llm_models': [m['uuid'] for m in llm_models],
                 },
             )
 
@@ -322,9 +346,16 @@ class RuntimeConnectionHandler(handler.Handler):
                 )
 
             messages_obj = [provider_message.Message.model_validate(message) for message in messages]
-            funcs_obj = [resource_tool.LLMTool.model_validate(func) for func in funcs]
 
-            result = await llm_model.requester.invoke_llm(
+            # The func field is excluded during model_dump() in plugin side (marked as exclude=True),
+            # but it's a required field for LLMTool validation. We need to provide a placeholder
+            # function when reconstructing the LLMTool objects from serialized data.
+            async def _placeholder_func(**kwargs):
+                pass
+
+            funcs_obj = [resource_tool.LLMTool.model_validate({**func, 'func': _placeholder_func}) for func in funcs]
+
+            result = await llm_model.provider.invoke_llm(
                 query=None,
                 model=llm_model,
                 messages=messages_obj,
@@ -345,6 +376,22 @@ class RuntimeConnectionHandler(handler.Handler):
             owner_type = data['owner_type']
             owner = data['owner']
             value = base64.b64decode(data['value_base64'])
+            max_value_bytes = (
+                self.ap.instance_config.data.get('plugin', {})
+                .get('binary_storage', {})
+                .get(
+                    'max_value_bytes',
+                    10 * 1024 * 1024,
+                )
+            )
+            try:
+                max_value_bytes = int(max_value_bytes)
+            except (TypeError, ValueError):
+                max_value_bytes = 10 * 1024 * 1024
+            if max_value_bytes >= 0 and len(value) > max_value_bytes:
+                return handler.ActionResponse.error(
+                    message=f'Binary storage value exceeds limit ({len(value)} > {max_value_bytes} bytes)',
+                )
 
             result = await self.ap.persistence_mgr.execute_async(
                 sqlalchemy.select(persistence_bstorage.BinaryStorage)
@@ -438,7 +485,7 @@ class RuntimeConnectionHandler(handler.Handler):
                 },
             )
 
-        @self.action(RuntimeToLangBotAction.GET_CONFIG_FILE)
+        @self.action(PluginToRuntimeAction.GET_CONFIG_FILE)
         async def get_config_file(data: dict[str, Any]) -> handler.ActionResponse:
             """Get a config file by file key"""
             file_key = data['file_key']
@@ -457,11 +504,326 @@ class RuntimeConnectionHandler(handler.Handler):
                     message=f'Failed to load config file {file_key}: {e}',
                 )
 
+        # ================= RAG Capability Handlers =================
+
+        @self.action(PluginToRuntimeAction.INVOKE_EMBEDDING)
+        async def invoke_embedding(data: dict[str, Any]) -> handler.ActionResponse:
+            embedding_model_uuid = data['embedding_model_uuid']
+            texts = data['texts']
+
+            embedding_model = await self.ap.model_mgr.get_embedding_model_by_uuid(embedding_model_uuid)
+            if embedding_model is None:
+                return handler.ActionResponse.error(
+                    message=f'Embedding model with embedding_model_uuid {embedding_model_uuid} not found',
+                )
+
+            try:
+                vectors = await embedding_model.provider.invoke_embedding(embedding_model, texts)
+                return handler.ActionResponse.success(data={'vectors': vectors})
+            except Exception as e:
+                return _make_rag_error_response(e, 'EmbeddingError', embedding_model_uuid=embedding_model_uuid)
+
+        @self.action(PluginToRuntimeAction.INVOKE_RERANK)
+        async def invoke_rerank(data: dict[str, Any]) -> handler.ActionResponse:
+            rerank_model_uuid = data['rerank_model_uuid']
+            query = data['query']
+            documents = data['documents']
+            top_k = data.get('top_k')
+            extra_args = data.get('extra_args', {})
+
+            try:
+                rerank_model = await self.ap.model_mgr.get_rerank_model_by_uuid(rerank_model_uuid)
+            except ValueError:
+                return handler.ActionResponse.error(
+                    message=f'Rerank model with rerank_model_uuid {rerank_model_uuid} not found',
+                )
+
+            try:
+                scores = await rerank_model.provider.invoke_rerank(
+                    model=rerank_model,
+                    query=query,
+                    documents=documents[:64],
+                    extra_args=extra_args,
+                )
+                scored = sorted(scores, key=lambda x: x.get('relevance_score', 0), reverse=True)
+                if top_k is not None:
+                    scored = scored[: int(top_k)]
+                return handler.ActionResponse.success(data={'results': scored})
+            except Exception as e:
+                return _make_rag_error_response(e, 'RerankError', rerank_model_uuid=rerank_model_uuid)
+
+        @self.action(PluginToRuntimeAction.VECTOR_UPSERT)
+        async def vector_upsert(data: dict[str, Any]) -> handler.ActionResponse:
+            collection_id = data['collection_id']
+            vectors = data['vectors']
+            ids = data['ids']
+            metadata = data.get('metadata')
+            documents = data.get('documents')
+            if len(vectors) != len(ids):
+                return handler.ActionResponse.error(message='vectors and ids must have same length')
+            if metadata and len(metadata) != len(vectors):
+                return handler.ActionResponse.error(message='metadata must match vectors length')
+            if documents and len(documents) != len(vectors):
+                return handler.ActionResponse.error(message='documents must match vectors length')
+            try:
+                await self.ap.rag_runtime_service.vector_upsert(
+                    collection_id,
+                    vectors,
+                    ids,
+                    metadata,
+                    documents,
+                )
+                return handler.ActionResponse.success(data={})
+            except Exception as e:
+                return _make_rag_error_response(e, 'VectorStoreError', collection_id=collection_id)
+
+        @self.action(PluginToRuntimeAction.VECTOR_SEARCH)
+        async def vector_search(data: dict[str, Any]) -> handler.ActionResponse:
+            collection_id = data['collection_id']
+            query_vector = data['query_vector']
+            top_k = data['top_k']
+            filters = data.get('filters')
+            search_type = data.get('search_type', 'vector')
+            query_text = data.get('query_text', '')
+            vector_weight = data.get('vector_weight')
+            try:
+                results = await self.ap.rag_runtime_service.vector_search(
+                    collection_id,
+                    query_vector,
+                    top_k,
+                    filters,
+                    search_type,
+                    query_text,
+                    vector_weight=vector_weight,
+                )
+                return handler.ActionResponse.success(data={'results': results})
+            except Exception as e:
+                return _make_rag_error_response(e, 'VectorStoreError', collection_id=collection_id)
+
+        @self.action(PluginToRuntimeAction.VECTOR_DELETE)
+        async def vector_delete(data: dict[str, Any]) -> handler.ActionResponse:
+            collection_id = data['collection_id']
+            file_ids = data.get('file_ids')
+            filters = data.get('filters')
+            try:
+                count = await self.ap.rag_runtime_service.vector_delete(collection_id, file_ids, filters)
+                return handler.ActionResponse.success(data={'count': count})
+            except Exception as e:
+                return _make_rag_error_response(e, 'VectorStoreError', collection_id=collection_id)
+
+        @self.action(PluginToRuntimeAction.VECTOR_LIST)
+        async def vector_list(data: dict[str, Any]) -> handler.ActionResponse:
+            collection_id = data['collection_id']
+            filters = data.get('filters')
+            limit = data.get('limit', 20)
+            offset = data.get('offset', 0)
+            try:
+                items, total = await self.ap.rag_runtime_service.vector_list(collection_id, filters, limit, offset)
+                return handler.ActionResponse.success(data={'items': items, 'total': total})
+            except Exception as e:
+                return _make_rag_error_response(e, 'VectorStoreError', collection_id=collection_id)
+
+        @self.action(PluginToRuntimeAction.GET_KNOWLEDEGE_FILE_STREAM)
+        async def get_knowledge_file_stream(data: dict[str, Any]) -> handler.ActionResponse:
+            storage_path = data['storage_path']
+            try:
+                content_bytes = await self.ap.rag_runtime_service.get_file_stream(storage_path)
+                file_key = await self.send_file(content_bytes, '')
+                return handler.ActionResponse.success(data={'file_key': file_key})
+            except Exception as e:
+                return _make_rag_error_response(e, 'FileServiceError', storage_path=storage_path)
+
+        @self.action(PluginToRuntimeAction.LIST_PARSERS)
+        async def list_parsers(data: dict[str, Any]) -> handler.ActionResponse:
+            """Plugin requests host to list available parser plugins."""
+            mime_type = data.get('mime_type')
+            try:
+                parsers = await self.ap.knowledge_service.list_parsers(mime_type)
+                return handler.ActionResponse.success(data={'parsers': parsers})
+            except Exception as e:
+                return _make_rag_error_response(e, 'ParserDiscoveryError', mime_type=mime_type)
+
+        @self.action(PluginToRuntimeAction.INVOKE_PARSER)
+        async def invoke_parser(data: dict[str, Any]) -> handler.ActionResponse:
+            """Plugin requests host to invoke a parser plugin."""
+            plugin_author = data['plugin_author']
+            plugin_name = data['plugin_name']
+            storage_path = data['storage_path']
+            mime_type = data.get('mime_type', 'application/octet-stream')
+            filename = data.get('filename', '')
+            metadata = data.get('metadata', {})
+            try:
+                # Read file from storage
+                file_bytes = await self.ap.rag_runtime_service.get_file_stream(storage_path)
+                context_data = {
+                    'mime_type': mime_type,
+                    'filename': filename,
+                    'metadata': metadata,
+                }
+                result = await self.ap.plugin_connector.call_parser(
+                    f'{plugin_author}/{plugin_name}', context_data, file_bytes
+                )
+                return handler.ActionResponse.success(data=result)
+            except Exception as e:
+                return _make_rag_error_response(e, 'ParserError')
+
+        # ================= Knowledge Base Query APIs =================
+
+        @self.action(PluginToRuntimeAction.LIST_KNOWLEDGE_BASES)
+        async def list_knowledge_bases(data: dict[str, Any]) -> handler.ActionResponse:
+            """List all knowledge bases available in the LangBot instance (unrestricted)."""
+            knowledge_bases = []
+            for kb_uuid, kb in self.ap.rag_mgr.knowledge_bases.items():
+                knowledge_bases.append(
+                    {
+                        'uuid': kb.get_uuid(),
+                        'name': kb.get_name(),
+                        'description': kb.knowledge_base_entity.description or '',
+                    }
+                )
+            return handler.ActionResponse.success(data={'knowledge_bases': knowledge_bases})
+
+        @self.action(PluginToRuntimeAction.RETRIEVE_KNOWLEDGE)
+        async def retrieve_knowledge(data: dict[str, Any]) -> handler.ActionResponse:
+            """Retrieve documents from any knowledge base (unrestricted)."""
+            kb_id = data['kb_id']
+            query_text = data['query_text']
+            top_k = data.get('top_k', 5)
+            filters = data.get('filters', {})
+
+            kb = await self.ap.rag_mgr.get_knowledge_base_by_uuid(kb_id)
+            if not kb:
+                return handler.ActionResponse.error(
+                    message=f'Knowledge base {kb_id} not found',
+                )
+
+            try:
+                entries = await kb.retrieve(
+                    query_text,
+                    settings={
+                        'top_k': top_k,
+                        'filters': filters,
+                    },
+                )
+                results = [entry.model_dump(mode='json') for entry in entries]
+                return handler.ActionResponse.success(data={'results': results})
+            except Exception as e:
+                return _make_rag_error_response(e, 'RetrievalError', kb_id=kb_id)
+
+        @self.action(PluginToRuntimeAction.LIST_PIPELINE_KNOWLEDGE_BASES)
+        async def list_pipeline_knowledge_bases(data: dict[str, Any]) -> handler.ActionResponse:
+            """List knowledge bases configured for the current query's pipeline."""
+            query_id = data['query_id']
+
+            if query_id not in self.ap.query_pool.cached_queries:
+                return handler.ActionResponse.error(
+                    message=f'Query with query_id {query_id} not found',
+                )
+
+            query = self.ap.query_pool.cached_queries[query_id]
+
+            kb_uuids = []
+            if query.pipeline_config:
+                local_agent_config = query.pipeline_config.get('ai', {}).get('local-agent', {})
+                kb_uuids = local_agent_config.get('knowledge-bases', [])
+                # Backward compatibility
+                if not kb_uuids:
+                    old_kb_uuid = local_agent_config.get('knowledge-base', '')
+                    if old_kb_uuid and old_kb_uuid != '__none__':
+                        kb_uuids = [old_kb_uuid]
+
+            knowledge_bases = []
+            for kb_uuid in kb_uuids:
+                kb = await self.ap.rag_mgr.get_knowledge_base_by_uuid(kb_uuid)
+                if kb:
+                    knowledge_bases.append(
+                        {
+                            'uuid': kb.get_uuid(),
+                            'name': kb.get_name(),
+                            'description': kb.knowledge_base_entity.description or '',
+                        }
+                    )
+
+            return handler.ActionResponse.success(data={'knowledge_bases': knowledge_bases})
+
+        @self.action(PluginToRuntimeAction.RETRIEVE_KNOWLEDGE_BASE)
+        async def retrieve_knowledge_base(data: dict[str, Any]) -> handler.ActionResponse:
+            """Retrieve documents from a knowledge base within the pipeline's scope."""
+            query_id = data['query_id']
+            kb_id = data['kb_id']
+            query_text = data['query_text']
+            top_k = data.get('top_k', 5)
+            filters = data.get('filters', {})
+
+            if query_id not in self.ap.query_pool.cached_queries:
+                return handler.ActionResponse.error(
+                    message=f'Query with query_id {query_id} not found',
+                )
+
+            query = self.ap.query_pool.cached_queries[query_id]
+
+            # Validate kb_id is in pipeline's allowed list
+            allowed_kb_uuids = []
+            if query.pipeline_config:
+                local_agent_config = query.pipeline_config.get('ai', {}).get('local-agent', {})
+                allowed_kb_uuids = local_agent_config.get('knowledge-bases', [])
+                if not allowed_kb_uuids:
+                    old_kb_uuid = local_agent_config.get('knowledge-base', '')
+                    if old_kb_uuid and old_kb_uuid != '__none__':
+                        allowed_kb_uuids = [old_kb_uuid]
+
+            if kb_id not in allowed_kb_uuids:
+                return handler.ActionResponse.error(
+                    message=f'Knowledge base {kb_id} is not configured for this pipeline',
+                )
+
+            kb = await self.ap.rag_mgr.get_knowledge_base_by_uuid(kb_id)
+            if not kb:
+                return handler.ActionResponse.error(
+                    message=f'Knowledge base {kb_id} not found',
+                )
+
+            try:
+                session_name = f'{query.session.launcher_type.value}_{query.session.launcher_id}'
+                entries = await kb.retrieve(
+                    query_text,
+                    settings={
+                        'top_k': top_k,
+                        'filters': filters,
+                        'session_name': session_name,
+                        'bot_uuid': query.bot_uuid or '',
+                        'sender_id': str(query.sender_id),
+                    },
+                )
+                results = [entry.model_dump(mode='json') for entry in entries]
+                return handler.ActionResponse.success(data={'results': results})
+            except Exception as e:
+                return _make_rag_error_response(e, 'RetrievalError', kb_id=kb_id)
+
+        @self.action(CommonAction.PING)
+        async def ping(data: dict[str, Any]) -> handler.ActionResponse:
+            """Ping"""
+            return handler.ActionResponse.success(
+                data={
+                    'pong': 'pong',
+                },
+            )
+
     async def ping(self) -> dict[str, Any]:
         """Ping the runtime"""
         return await self.call_action(
             CommonAction.PING,
             {},
+            timeout=10,
+        )
+
+    async def set_runtime_config(self, cloud_service_url: str) -> dict[str, Any]:
+        """Push runtime configuration (e.g. marketplace URL) to the runtime."""
+        return await self.call_action(
+            LangBotToRuntimeAction.SET_RUNTIME_CONFIG,
+            {
+                'cloud_service_url': cloud_service_url,
+            },
             timeout=10,
         )
 
@@ -570,6 +932,18 @@ class RuntimeConnectionHandler(handler.Handler):
 
         return result
 
+    async def notify_plugin_diagnostic(self, diagnostic: dict[str, Any]) -> dict[str, Any]:
+        """Notify the plugin runtime about a best-effort plugin diagnostic.
+
+        This intentionally uses the raw protocol string instead of a SDK enum so
+        LangBot can keep running with older langbot-plugin versions.
+        """
+        return await self.call_action(
+            _langbot_to_runtime_action('PLUGIN_DIAGNOSTIC', 'plugin_diagnostic'),
+            diagnostic,
+            timeout=5,
+        )
+
     async def list_tools(self, include_plugins: list[str] | None = None) -> list[dict[str, Any]]:
         """List tools"""
         result = await self.call_action(
@@ -629,6 +1003,31 @@ class RuntimeConnectionHandler(handler.Handler):
 
         return readme_bytes.decode('utf-8')
 
+    async def get_plugin_logs(
+        self,
+        plugin_author: str,
+        plugin_name: str,
+        limit: int = 200,
+        level: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Get recent log lines captured from the plugin's stderr."""
+        try:
+            result = await self.call_action(
+                LangBotToRuntimeAction.GET_PLUGIN_LOGS,
+                {
+                    'plugin_author': plugin_author,
+                    'plugin_name': plugin_name,
+                    'limit': limit,
+                    'level': level,
+                },
+                timeout=20,
+            )
+        except Exception:
+            traceback.print_exc()
+            return []
+
+        return result.get('logs', [])
+
     async def get_plugin_assets(self, plugin_author: str, plugin_name: str, filepath: str) -> dict[str, Any]:
         """Get plugin assets"""
         result = await self.call_action(
@@ -641,6 +1040,11 @@ class RuntimeConnectionHandler(handler.Handler):
             timeout=20,
         )
         asset_file_key = result['file_file_key']
+        if not asset_file_key:
+            return {
+                'asset_base64': '',
+                'mime_type': '',
+            }
         mime_type = result['mime_type']
         asset_bytes = await self.read_local_file(asset_file_key)
         await self.delete_local_file(asset_file_key)
@@ -648,6 +1052,30 @@ class RuntimeConnectionHandler(handler.Handler):
             'asset_base64': base64.b64encode(asset_bytes).decode('utf-8'),
             'mime_type': mime_type,
         }
+
+    async def handle_page_api(
+        self,
+        plugin_author: str,
+        plugin_name: str,
+        page_id: str,
+        endpoint: str,
+        method: str,
+        body: Any = None,
+    ) -> dict[str, Any]:
+        """Forward a page API call to the plugin via runtime."""
+        result = await self.call_action(
+            LangBotToRuntimeAction.PAGE_API,
+            {
+                'plugin_author': plugin_author,
+                'plugin_name': plugin_name,
+                'page_id': page_id,
+                'endpoint': endpoint,
+                'method': method,
+                'body': body,
+            },
+            timeout=30,
+        )
+        return result
 
     async def cleanup_plugin_data(self, plugin_author: str, plugin_name: str) -> None:
         """Cleanup plugin settings and binary storage"""
@@ -716,26 +1144,13 @@ class RuntimeConnectionHandler(handler.Handler):
         async for ret in gen:
             yield ret
 
-    # KnowledgeRetriever methods
-    async def list_knowledge_retrievers(self, include_plugins: list[str] | None = None) -> list[dict[str, Any]]:
-        """List knowledge retrievers"""
-        result = await self.call_action(
-            LangBotToRuntimeAction.LIST_KNOWLEDGE_RETRIEVERS,
-            {
-                'include_plugins': include_plugins,
-            },
-            timeout=10,
-        )
-        return result['retrievers']
-
     async def retrieve_knowledge(
         self,
         plugin_author: str,
         plugin_name: str,
         retriever_name: str,
-        instance_id: str,
         retrieval_context: dict[str, Any],
-    ) -> list[dict[str, Any]]:
+    ) -> dict[str, Any]:
         """Retrieve knowledge"""
         result = await self.call_action(
             LangBotToRuntimeAction.RETRIEVE_KNOWLEDGE,
@@ -743,19 +1158,7 @@ class RuntimeConnectionHandler(handler.Handler):
                 'plugin_author': plugin_author,
                 'plugin_name': plugin_name,
                 'retriever_name': retriever_name,
-                'instance_id': instance_id,
                 'retrieval_context': retrieval_context,
-            },
-            timeout=30,
-        )
-        return result['retrieval_results']
-
-    async def sync_polymorphic_component_instances(self, required_instances: list[dict[str, Any]]) -> dict[str, Any]:
-        """Sync polymorphic component instances with runtime"""
-        result = await self.call_action(
-            LangBotToRuntimeAction.SYNC_POLYMORPHIC_COMPONENT_INSTANCES,
-            {
-                'required_instances': required_instances,
             },
             timeout=30,
         )
@@ -767,5 +1170,93 @@ class RuntimeConnectionHandler(handler.Handler):
             LangBotToRuntimeAction.GET_DEBUG_INFO,
             {},
             timeout=10,
+        )
+        return result
+
+    # ================= RAG Capability Callers (LangBot -> Runtime) =================
+
+    async def rag_ingest_document(
+        self, plugin_author: str, plugin_name: str, context_data: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Send INGEST_DOCUMENT action to runtime."""
+        result = await self.call_action(
+            LangBotToRuntimeAction.RAG_INGEST_DOCUMENT,
+            {'plugin_author': plugin_author, 'plugin_name': plugin_name, 'context': context_data},
+            timeout=1200,  # Ingestion can be slow for large documents
+        )
+        return result
+
+    async def rag_delete_document(self, plugin_author: str, plugin_name: str, document_id: str, kb_id: str) -> bool:
+        result = await self.call_action(
+            LangBotToRuntimeAction.RAG_DELETE_DOCUMENT,
+            {'plugin_author': plugin_author, 'plugin_name': plugin_name, 'document_id': document_id, 'kb_id': kb_id},
+            timeout=30,
+        )
+        return result.get('success', False)
+
+    async def rag_on_kb_create(
+        self, plugin_author: str, plugin_name: str, kb_id: str, config: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Notify plugin about KB creation."""
+        result = await self.call_action(
+            LangBotToRuntimeAction.RAG_ON_KB_CREATE,
+            {'plugin_author': plugin_author, 'plugin_name': plugin_name, 'kb_id': kb_id, 'config': config},
+            timeout=30,
+        )
+        return result
+
+    async def rag_on_kb_delete(self, plugin_author: str, plugin_name: str, kb_id: str) -> dict[str, Any]:
+        """Notify plugin about KB deletion."""
+        result = await self.call_action(
+            LangBotToRuntimeAction.RAG_ON_KB_DELETE,
+            {'plugin_author': plugin_author, 'plugin_name': plugin_name, 'kb_id': kb_id},
+            timeout=30,
+        )
+        return result
+
+    async def get_rag_creation_schema(self, plugin_author: str, plugin_name: str) -> dict[str, Any]:
+        return await self.call_action(
+            LangBotToRuntimeAction.GET_RAG_CREATION_SETTINGS_SCHEMA,
+            {'plugin_author': plugin_author, 'plugin_name': plugin_name},
+            timeout=10,
+        )
+
+    async def get_rag_retrieval_schema(self, plugin_author: str, plugin_name: str) -> dict[str, Any]:
+        return await self.call_action(
+            LangBotToRuntimeAction.GET_RAG_RETRIEVAL_SETTINGS_SCHEMA,
+            {'plugin_author': plugin_author, 'plugin_name': plugin_name},
+            timeout=10,
+        )
+
+    async def list_knowledge_engines(self) -> list[dict[str, Any]]:
+        """List all available Knowledge Engines from plugins."""
+        result = await self.call_action(LangBotToRuntimeAction.LIST_KNOWLEDGE_ENGINES, {}, timeout=60)
+        return result.get('engines', [])
+
+    # ================= Parser Capability Callers (LangBot -> Runtime) =================
+
+    async def list_parsers(self) -> list[dict[str, Any]]:
+        """List all available parsers from plugins."""
+        result = await self.call_action(LangBotToRuntimeAction.LIST_PARSERS, {}, timeout=60)
+        return result.get('parsers', [])
+
+    async def parse_document(
+        self, plugin_author: str, plugin_name: str, context_data: dict[str, Any], file_bytes: bytes
+    ) -> dict[str, Any]:
+        """Send PARSE_DOCUMENT action to runtime.
+
+        Sends file content via chunked FILE_CHUNK transfer, then invokes
+        the PARSE_DOCUMENT action with a file_key reference.
+        """
+        # Send file to runtime via chunked transfer
+        file_key = await self.send_file(file_bytes, '')
+
+        # Include file_key in context_data for the runtime to read
+        context_data['file_key'] = file_key
+
+        result = await self.call_action(
+            LangBotToRuntimeAction.PARSE_DOCUMENT,
+            {'plugin_author': plugin_author, 'plugin_name': plugin_name, 'context': context_data},
+            timeout=300,
         )
         return result

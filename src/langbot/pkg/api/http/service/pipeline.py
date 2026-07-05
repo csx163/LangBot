@@ -76,6 +76,14 @@ class PipelineService:
     async def create_pipeline(self, pipeline_data: dict, default: bool = False) -> str:
         from ....utils import paths as path_utils
 
+        # Check limitation
+        limitation = self.ap.instance_config.data.get('system', {}).get('limitation', {})
+        max_pipelines = limitation.get('max_pipelines', -1)
+        if max_pipelines >= 0:
+            existing_pipelines = await self.get_pipelines()
+            if len(existing_pipelines) >= max_pipelines:
+                raise ValueError(f'Maximum number of pipelines ({max_pipelines}) reached')
+
         pipeline_data['uuid'] = str(uuid.uuid4())
         pipeline_data['for_version'] = self.ap.ver_mgr.get_current_version()
         pipeline_data['stages'] = default_stage_order.copy()
@@ -92,6 +100,8 @@ class PipelineService:
                 'enable_all_mcp_servers': True,
                 'plugins': [],
                 'mcp_servers': [],
+                'mcp_resources': [],
+                'mcp_resource_agent_read_enabled': True,
             }
 
         await self.ap.persistence_mgr.execute_async(
@@ -105,14 +115,9 @@ class PipelineService:
         return pipeline_data['uuid']
 
     async def update_pipeline(self, pipeline_uuid: str, pipeline_data: dict) -> None:
-        if 'uuid' in pipeline_data:
-            del pipeline_data['uuid']
-        if 'for_version' in pipeline_data:
-            del pipeline_data['for_version']
-        if 'stages' in pipeline_data:
-            del pipeline_data['stages']
-        if 'is_default' in pipeline_data:
-            del pipeline_data['is_default']
+        pipeline_data = pipeline_data.copy()
+        for protected_field in ('uuid', 'for_version', 'stages', 'is_default'):
+            pipeline_data.pop(protected_field, None)
 
         await self.ap.persistence_mgr.execute_async(
             sqlalchemy.update(persistence_pipeline.LegacyPipeline)
@@ -151,6 +156,62 @@ class PipelineService:
         )
         await self.ap.pipeline_mgr.remove_pipeline(pipeline_uuid)
 
+    async def copy_pipeline(self, pipeline_uuid: str) -> str:
+        """Copy a pipeline with all its configurations"""
+        # Check limitation
+        limitation = self.ap.instance_config.data.get('system', {}).get('limitation', {})
+        max_pipelines = limitation.get('max_pipelines', -1)
+        if max_pipelines >= 0:
+            existing_pipelines = await self.get_pipelines()
+            if len(existing_pipelines) >= max_pipelines:
+                raise ValueError(f'Maximum number of pipelines ({max_pipelines}) reached')
+
+        # Get the original pipeline
+        result = await self.ap.persistence_mgr.execute_async(
+            sqlalchemy.select(persistence_pipeline.LegacyPipeline).where(
+                persistence_pipeline.LegacyPipeline.uuid == pipeline_uuid
+            )
+        )
+
+        original_pipeline = result.first()
+        if original_pipeline is None:
+            raise ValueError(f'Pipeline {pipeline_uuid} not found')
+
+        # Create new pipeline data
+        new_uuid = str(uuid.uuid4())
+        new_pipeline_data = {
+            'uuid': new_uuid,
+            'name': f'{original_pipeline.name} (Copy)',
+            'description': original_pipeline.description,
+            'for_version': self.ap.ver_mgr.get_current_version(),
+            'stages': original_pipeline.stages.copy() if original_pipeline.stages else default_stage_order.copy(),
+            'config': original_pipeline.config.copy() if original_pipeline.config else {},
+            'is_default': False,
+            'extensions_preferences': (
+                original_pipeline.extensions_preferences.copy()
+                if original_pipeline.extensions_preferences
+                else {
+                    'enable_all_plugins': True,
+                    'enable_all_mcp_servers': True,
+                    'plugins': [],
+                    'mcp_servers': [],
+                    'mcp_resources': [],
+                    'mcp_resource_agent_read_enabled': True,
+                }
+            ),
+        }
+
+        # Insert the new pipeline
+        await self.ap.persistence_mgr.execute_async(
+            sqlalchemy.insert(persistence_pipeline.LegacyPipeline).values(**new_pipeline_data)
+        )
+
+        # Load the new pipeline
+        pipeline = await self.get_pipeline(new_uuid)
+        await self.ap.pipeline_mgr.load_pipeline(pipeline)
+
+        return new_uuid
+
     async def update_pipeline_extensions(
         self,
         pipeline_uuid: str,
@@ -158,6 +219,10 @@ class PipelineService:
         bound_mcp_servers: list[str] = None,
         enable_all_plugins: bool = True,
         enable_all_mcp_servers: bool = True,
+        bound_skills: list[str] = None,
+        enable_all_skills: bool = True,
+        bound_mcp_resources: list[dict] = None,
+        mcp_resource_agent_read_enabled: bool | None = None,
     ) -> None:
         """Update the bound plugins and MCP servers for a pipeline"""
         # Get current pipeline
@@ -175,9 +240,16 @@ class PipelineService:
         extensions_preferences = pipeline.extensions_preferences or {}
         extensions_preferences['enable_all_plugins'] = enable_all_plugins
         extensions_preferences['enable_all_mcp_servers'] = enable_all_mcp_servers
+        extensions_preferences['enable_all_skills'] = enable_all_skills
         extensions_preferences['plugins'] = bound_plugins
+        if mcp_resource_agent_read_enabled is not None:
+            extensions_preferences['mcp_resource_agent_read_enabled'] = mcp_resource_agent_read_enabled
         if bound_mcp_servers is not None:
             extensions_preferences['mcp_servers'] = bound_mcp_servers
+        if bound_skills is not None:
+            extensions_preferences['skills'] = bound_skills
+        if bound_mcp_resources is not None:
+            extensions_preferences['mcp_resources'] = bound_mcp_resources
 
         await self.ap.persistence_mgr.execute_async(
             sqlalchemy.update(persistence_pipeline.LegacyPipeline)

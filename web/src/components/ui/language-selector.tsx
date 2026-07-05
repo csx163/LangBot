@@ -1,5 +1,3 @@
-'use client';
-
 import { useState, useEffect } from 'react';
 import {
   Select,
@@ -39,6 +37,18 @@ export function LanguageSelector({
     } else if (i18n.language === 'ja' || i18n.language === 'ja-JP') {
       setCurrentLanguage('ja-JP');
       localStorage.setItem('langbot_language', 'ja-JP');
+    } else if (i18n.language === 'th' || i18n.language === 'th-TH') {
+      setCurrentLanguage('th-TH');
+      localStorage.setItem('langbot_language', 'th-TH');
+    } else if (i18n.language === 'vi' || i18n.language === 'vi-VN') {
+      setCurrentLanguage('vi-VN');
+      localStorage.setItem('langbot_language', 'vi-VN');
+    } else if (i18n.language === 'es' || i18n.language === 'es-ES') {
+      setCurrentLanguage('es-ES');
+      localStorage.setItem('langbot_language', 'es-ES');
+    } else if (i18n.language === 'ru' || i18n.language === 'ru-RU') {
+      setCurrentLanguage('ru-RU');
+      localStorage.setItem('langbot_language', 'ru-RU');
     } else {
       setCurrentLanguage('en-US');
       localStorage.setItem('langbot_language', 'en-US');
@@ -46,7 +56,16 @@ export function LanguageSelector({
 
     const savedLanguage = localStorage.getItem('langbot_language');
     if (savedLanguage) {
-      i18n.changeLanguage(savedLanguage);
+      // Only switch when the active language actually differs. Calling
+      // i18n.changeLanguage() unconditionally on every mount emits a
+      // `languageChanged` event even when nothing changed, which hands every
+      // useTranslation() consumer a fresh `t` reference and re-runs effects
+      // that depend on `t` (e.g. data refetches). Since this selector mounts
+      // each time the account dropdown opens, that surfaced as a spurious
+      // page "refresh". Guard the call to keep mounts side-effect-free.
+      if (i18n.language !== savedLanguage) {
+        i18n.changeLanguage(savedLanguage);
+      }
       setCurrentLanguage(savedLanguage);
     } else {
       const browserLanguage = navigator.language;
@@ -58,6 +77,20 @@ export function LanguageSelector({
           detectedLanguage = 'zh-Hant';
         } else if (browserLanguage === 'ja' || browserLanguage === 'ja-JP') {
           detectedLanguage = 'ja-JP';
+        } else if (browserLanguage === 'th' || browserLanguage === 'th-TH') {
+          detectedLanguage = 'th-TH';
+        } else if (browserLanguage === 'vi' || browserLanguage === 'vi-VN') {
+          detectedLanguage = 'vi-VN';
+        } else if (
+          browserLanguage === 'es' ||
+          browserLanguage.startsWith('es-')
+        ) {
+          detectedLanguage = 'es-ES';
+        } else if (
+          browserLanguage === 'ru' ||
+          browserLanguage.startsWith('ru-')
+        ) {
+          detectedLanguage = 'ru-RU';
         } else {
           detectedLanguage = 'en-US';
         }
@@ -92,6 +125,10 @@ export function LanguageSelector({
         <SelectItem value="zh-Hant">繁體中文</SelectItem>
         <SelectItem value="en-US">English</SelectItem>
         <SelectItem value="ja-JP">日本語</SelectItem>
+        <SelectItem value="th-TH">ภาษาไทย</SelectItem>
+        <SelectItem value="vi-VN">Tiếng Việt</SelectItem>
+        <SelectItem value="es-ES">Español</SelectItem>
+        <SelectItem value="ru-RU">Русский</SelectItem>
       </SelectContent>
     </Select>
   );

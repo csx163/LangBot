@@ -17,20 +17,16 @@ import { Switch } from '@/components/ui/switch';
 import { ControllerRenderProps } from 'react-hook-form';
 import { Button } from '@/components/ui/button';
 import { useEffect, useState } from 'react';
-import { httpClient } from '@/app/infra/http/HttpClient';
+import { httpClient, systemInfo, userInfo } from '@/app/infra/http';
 import {
   LLMModel,
   Bot,
   KnowledgeBase,
-  ExternalKnowledgeBase,
-  ApiRespPluginSystemStatus,
+  EmbeddingModel,
+  RerankModel,
+  PluginTool,
 } from '@/app/infra/entities/api';
 import { toast } from 'sonner';
-import {
-  HoverCard,
-  HoverCardContent,
-  HoverCardTrigger,
-} from '@/components/ui/hover-card';
 import { useTranslation } from 'react-i18next';
 import { extractI18nObject } from '@/i18n/I18nProvider';
 import { Textarea } from '@/components/ui/textarea';
@@ -43,30 +39,118 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Plus, X } from 'lucide-react';
+import {
+  Plus,
+  X,
+  Eye,
+  Wrench,
+  Trash2,
+  Sparkles,
+  Info,
+  Settings,
+  ChevronDown,
+} from 'lucide-react';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import SettingsDialog, {
+  SettingsSection,
+} from '@/app/home/components/settings-dialog/SettingsDialog';
+import ToolResourceSelectors from '@/app/home/components/dynamic-form/ToolResourceSelectors';
+import { LANGBOT_MODELS_PROVIDER_REQUESTER } from '@/app/home/components/models-dialog/types';
+
+function hasUsableUuid<T extends { uuid?: string | null }>(
+  item: T,
+): item is T & { uuid: string } {
+  return typeof item.uuid === 'string' && item.uuid.trim().length > 0;
+}
+
+function hasUsableOptionName(option: { name?: string | null }): boolean {
+  return typeof option.name === 'string' && option.name.trim().length > 0;
+}
 
 export default function DynamicFormItemComponent({
   config,
   field,
+  formValues,
   onFileUploaded,
+  setFormValue,
+  systemContext,
 }: {
   config: IDynamicFormItemSchema;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   field: ControllerRenderProps<any, any>;
+  formValues?: Record<string, unknown>;
   onFileUploaded?: (fileKey: string) => void;
+  setFormValue?: (name: string, value: unknown) => void;
+  systemContext?: Record<string, unknown>;
 }) {
   const [llmModels, setLlmModels] = useState<LLMModel[]>([]);
+  const [embeddingModels, setEmbeddingModels] = useState<EmbeddingModel[]>([]);
+  const [rerankModels, setRerankModels] = useState<RerankModel[]>([]);
   const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBase[]>([]);
-  const [externalKnowledgeBases, setExternalKnowledgeBases] = useState<
-    ExternalKnowledgeBase[]
-  >([]);
   const [bots, setBots] = useState<Bot[]>([]);
+  const [tools, setTools] = useState<PluginTool[]>([]);
   const [uploading, setUploading] = useState<boolean>(false);
   const [kbDialogOpen, setKbDialogOpen] = useState(false);
   const [tempSelectedKBIds, setTempSelectedKBIds] = useState<string[]>([]);
-  const [pluginSystemStatus, setPluginSystemStatus] =
-    useState<ApiRespPluginSystemStatus | null>(null);
+  const [toolsDialogOpen, setToolsDialogOpen] = useState(false);
+  const [tempSelectedToolNames, setTempSelectedToolNames] = useState<string[]>(
+    [],
+  );
   const { t } = useTranslation();
+  const [modelsDialogOpen, setModelsDialogOpen] = useState(false);
+  const [settingsSection, setSettingsSection] =
+    useState<SettingsSection>('models');
+
+  const fetchLlmModels = () => {
+    httpClient
+      .getProviderLLMModels()
+      .then((resp) => {
+        setLlmModels(resp.models.filter(hasUsableUuid));
+      })
+      .catch((err) => {
+        toast.error(t('models.getModelListError') + err.msg);
+      });
+  };
+
+  const fetchEmbeddingModels = () => {
+    httpClient
+      .getProviderEmbeddingModels()
+      .then((resp) => {
+        setEmbeddingModels(resp.models.filter(hasUsableUuid));
+      })
+      .catch((err) => {
+        toast.error(t('embedding.getModelListError') + err.msg);
+      });
+  };
+
+  const fetchRerankModels = () => {
+    httpClient
+      .getProviderRerankModels()
+      .then((resp) => {
+        setRerankModels(resp.models.filter(hasUsableUuid));
+      })
+      .catch((err) => {
+        toast.error('Failed to load rerank models: ' + err.msg);
+      });
+  };
+
+  const handleModelsDialogChange = (open: boolean) => {
+    setModelsDialogOpen(open);
+    if (!open) {
+      fetchLlmModels();
+      fetchEmbeddingModels();
+      fetchRerankModels();
+    }
+  };
 
   const handleFileUpload = async (file: File): Promise<IFileConfig | null> => {
     const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
@@ -98,16 +182,53 @@ export default function DynamicFormItemComponent({
     }
   };
 
+  // Whether to show Space login CTA in model selectors
+  const showSpaceLoginCTA =
+    !systemInfo.disable_models_service && userInfo?.account_type !== 'space';
+
+  const handleSpaceLogin = () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        toast.error(t('common.error'));
+        return;
+      }
+      const currentOrigin = window.location.origin;
+      const redirectUri = `${currentOrigin}/auth/space/callback?mode=bind`;
+      httpClient
+        .getSpaceAuthorizeUrl(redirectUri, token)
+        .then((response) => {
+          window.location.href = response.authorize_url;
+        })
+        .catch(() => {
+          toast.error(t('common.spaceLoginFailed'));
+        });
+    } catch {
+      toast.error(t('common.spaceLoginFailed'));
+    }
+  };
+
   useEffect(() => {
     if (config.type === DynamicFormItemType.LLM_MODEL_SELECTOR) {
-      httpClient
-        .getProviderLLMModels()
-        .then((resp) => {
-          setLlmModels(resp.models);
-        })
-        .catch((err) => {
-          toast.error('Failed to get LLM model list: ' + err.message);
-        });
+      fetchLlmModels();
+    }
+  }, [config.type]);
+
+  useEffect(() => {
+    if (config.type === DynamicFormItemType.EMBEDDING_MODEL_SELECTOR) {
+      fetchEmbeddingModels();
+    }
+  }, [config.type]);
+
+  useEffect(() => {
+    if (config.type === DynamicFormItemType.RERANK_MODEL_SELECTOR) {
+      fetchRerankModels();
+    }
+  }, [config.type]);
+
+  useEffect(() => {
+    if (config.type === DynamicFormItemType.MODEL_FALLBACK_SELECTOR) {
+      fetchLlmModels();
     }
   }, [config.type]);
 
@@ -119,54 +240,51 @@ export default function DynamicFormItemComponent({
       httpClient
         .getKnowledgeBases()
         .then((resp) => {
-          setKnowledgeBases(resp.bases);
+          setKnowledgeBases(resp.bases.filter(hasUsableUuid));
         })
         .catch((err) => {
-          toast.error('Failed to get knowledge base list: ' + err.message);
-        });
-
-      // Fetch plugin system status
-      httpClient
-        .getPluginSystemStatus()
-        .then((status) => {
-          setPluginSystemStatus(status);
-        })
-        .catch((err) => {
-          console.error('Failed to get plugin system status:', err);
+          toast.error(t('knowledge.getKnowledgeBaseListError') + err.msg);
         });
     }
   }, [config.type]);
-
-  useEffect(() => {
-    if (
-      (config.type === DynamicFormItemType.KNOWLEDGE_BASE_SELECTOR ||
-        config.type === DynamicFormItemType.KNOWLEDGE_BASE_MULTI_SELECTOR) &&
-      pluginSystemStatus?.is_enable &&
-      pluginSystemStatus?.is_connected
-    ) {
-      httpClient
-        .getExternalKnowledgeBases()
-        .then((resp) => {
-          setExternalKnowledgeBases(resp.bases);
-        })
-        .catch((err) => {
-          console.error('Failed to get external knowledge base list:', err);
-        });
-    }
-  }, [config.type, pluginSystemStatus]);
 
   useEffect(() => {
     if (config.type === DynamicFormItemType.BOT_SELECTOR) {
       httpClient
         .getBots()
         .then((resp) => {
-          setBots(resp.bots);
+          setBots(resp.bots.filter(hasUsableUuid));
         })
         .catch((err) => {
-          toast.error('Failed to get bot list: ' + err.message);
+          toast.error(t('bots.getBotListError') + err.msg);
         });
     }
   }, [config.type]);
+
+  useEffect(() => {
+    if (config.type === DynamicFormItemType.TOOLS_SELECTOR) {
+      httpClient
+        .getTools()
+        .then((resp) => {
+          setTools(resp.tools);
+        })
+        .catch((err) => {
+          toast.error(
+            t('tools.getToolListError', 'Failed to get tools: ') + err.msg,
+          );
+        });
+    }
+  }, [config.type]);
+
+  const handleCompositePatch = (patch: Record<string, unknown>) => {
+    for (const [name, value] of Object.entries(patch)) {
+      if (setFormValue) {
+        setFormValue(name, value);
+      } else if (name === field.name) {
+        field.onChange(value);
+      }
+    }
+  };
 
   switch (config.type) {
     case DynamicFormItemType.INT:
@@ -174,27 +292,67 @@ export default function DynamicFormItemComponent({
       return (
         <Input
           type="number"
+          className="w-full max-w-xs"
           {...field}
           onChange={(e) => field.onChange(Number(e.target.value))}
         />
       );
 
     case DynamicFormItemType.STRING:
-      return <Input {...field} />;
+      if (config.options && config.options.length > 0) {
+        return (
+          <div className="flex w-full max-w-md min-w-0 items-center gap-1.5">
+            <Input className="min-w-0 flex-1" {...field} />
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  type="button"
+                  className="h-9 w-9 shrink-0 text-muted-foreground"
+                >
+                  <ChevronDown className="size-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {config.options.map((option) => (
+                  <DropdownMenuItem
+                    key={option.name}
+                    onClick={() => field.onChange(option.name)}
+                  >
+                    <div className="flex flex-col gap-0.5">
+                      <span>{extractI18nObject(option.label)}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {option.name}
+                      </span>
+                    </div>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        );
+      }
+      return <Input className="w-full max-w-md" {...field} />;
 
     case DynamicFormItemType.TEXT:
-      return <Textarea {...field} className="min-h-[120px]" />;
+      return (
+        <Textarea
+          {...field}
+          className="min-h-[120px] w-full max-w-full resize-y overflow-x-hidden break-all"
+        />
+      );
 
     case DynamicFormItemType.BOOLEAN:
       return <Switch checked={field.value} onCheckedChange={field.onChange} />;
 
     case DynamicFormItemType.STRING_ARRAY:
       return (
-        <div className="space-y-2">
+        <div className="w-full max-w-md min-w-0 space-y-2">
           {field.value.map((item: string, index: number) => (
-            <div key={index} className="flex gap-2 items-center">
+            <div key={index} className="flex min-w-0 items-center gap-1.5">
               <Input
-                className="w-[200px]"
+                className="min-w-0 flex-1"
                 value={item}
                 onChange={(e) => {
                   const newValue = [...field.value];
@@ -202,9 +360,11 @@ export default function DynamicFormItemComponent({
                   field.onChange(newValue);
                 }}
               />
-              <button
+              <Button
                 type="button"
-                className="p-2 hover:bg-gray-100 rounded"
+                variant="ghost"
+                size="icon"
+                className="shrink-0 text-muted-foreground hover:text-destructive"
                 onClick={() => {
                   const newValue = field.value.filter(
                     (_: string, i: number) => i !== index,
@@ -212,24 +372,19 @@ export default function DynamicFormItemComponent({
                   field.onChange(newValue);
                 }}
               >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 24 24"
-                  fill="currentColor"
-                  className="w-5 h-5 text-red-500"
-                >
-                  <path d="M7 4V2H17V4H22V6H20V21C20 21.5523 19.5523 22 19 22H5C4.44772 22 4 21.5523 4 21V6H2V4H7ZM6 6V20H18V6H6ZM9 9H11V17H9V9ZM13 9H15V17H13V9Z"></path>
-                </svg>
-              </button>
+                <Trash2 className="size-4" />
+              </Button>
             </div>
           ))}
           <Button
             type="button"
             variant="outline"
+            className="w-full border-dashed text-muted-foreground hover:text-foreground"
             onClick={() => {
               field.onChange([...field.value, '']);
             }}
           >
+            <Plus className="size-4 mr-1.5" />
             {t('common.add')}
           </Button>
         </div>
@@ -238,13 +393,17 @@ export default function DynamicFormItemComponent({
     case DynamicFormItemType.SELECT:
       return (
         <Select value={field.value} onValueChange={field.onChange}>
-          <SelectTrigger className="bg-[#ffffff] dark:bg-[#2a2a2e]">
+          <SelectTrigger className="w-full max-w-md bg-[#ffffff] dark:bg-[#2a2a2e]">
             <SelectValue placeholder={t('common.select')} />
           </SelectTrigger>
           <SelectContent>
             <SelectGroup>
-              {config.options?.map((option) => (
-                <SelectItem key={option.name} value={option.name}>
+              {config.options?.filter(hasUsableOptionName).map((option) => (
+                <SelectItem
+                  key={option.name}
+                  value={option.name}
+                  description={option.name}
+                >
                   {extractI18nObject(option.label)}
                 </SelectItem>
               ))}
@@ -254,202 +413,895 @@ export default function DynamicFormItemComponent({
       );
 
     case DynamicFormItemType.LLM_MODEL_SELECTOR:
+      // Separate space models from regular models
+      const spaceModels = llmModels.filter(
+        (m) => m.provider?.requester === LANGBOT_MODELS_PROVIDER_REQUESTER,
+      );
+      const regularModels = llmModels.filter(
+        (m) => m.provider?.requester !== LANGBOT_MODELS_PROVIDER_REQUESTER,
+      );
+
+      // Group regular models by provider
+      const groupedModels = regularModels.reduce(
+        (acc, model) => {
+          const providerName =
+            model.provider?.name || model.provider?.requester || 'Unknown';
+          if (!acc[providerName]) acc[providerName] = [];
+          acc[providerName].push(model);
+          return acc;
+        },
+        {} as Record<string, LLMModel[]>,
+      );
+
+      // Group space models by provider (for logged-in users)
+      const groupedSpaceModels = spaceModels.reduce(
+        (acc, model) => {
+          const providerName =
+            model.provider?.name || model.provider?.requester || 'Unknown';
+          if (!acc[providerName]) acc[providerName] = [];
+          acc[providerName].push(model);
+          return acc;
+        },
+        {} as Record<string, LLMModel[]>,
+      );
+
+      // Hardcoded preview model names for CTA when no space models are synced
+      const previewModelNames = [
+        'gpt-4o',
+        'claude-sonnet-4-20250514',
+        'deepseek-chat',
+        'gemini-2.5-flash',
+        'qwen-plus',
+      ];
+
       return (
-        <Select value={field.value} onValueChange={field.onChange}>
-          <SelectTrigger className="bg-[#ffffff] dark:bg-[#2a2a2e]">
-            <SelectValue placeholder={t('models.selectModel')} />
+        <div className="flex w-full max-w-md min-w-0 items-center gap-1.5">
+          <div className="min-w-0 flex-1">
+            <Select value={field.value} onValueChange={field.onChange}>
+              <SelectTrigger className="min-w-0 bg-[#ffffff] dark:bg-[#2a2a2e]">
+                <SelectValue placeholder={t('models.selectModel')} />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(groupedModels).map(([providerName, models]) => (
+                  <SelectGroup key={providerName}>
+                    <SelectLabel>{providerName}</SelectLabel>
+                    {models.map((model) => (
+                      <SelectItem key={model.uuid} value={model.uuid}>
+                        <span className="inline-flex items-center gap-1">
+                          {model.name}
+                          {model.abilities?.includes('vision') && (
+                            <Eye className="h-3 w-3 text-muted-foreground" />
+                          )}
+                          {model.abilities?.includes('func_call') && (
+                            <Wrench className="h-3 w-3 text-muted-foreground" />
+                          )}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                ))}
+                {/* Space models section */}
+                {showSpaceLoginCTA ? (
+                  <SelectGroup>
+                    <SelectLabel>
+                      <span className="inline-flex items-center gap-1.5">
+                        <Sparkles className="h-3.5 w-3.5 text-purple-500" />
+                        {t('models.langbotModels')}
+                        <Tooltip>
+                          <TooltipTrigger
+                            asChild
+                            onMouseDown={(e) => e.preventDefault()}
+                          >
+                            <Info className="h-3 w-3 text-muted-foreground cursor-help" />
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-[240px]">
+                            {t('models.spaceTrialTooltip')}
+                          </TooltipContent>
+                        </Tooltip>
+                      </span>
+                    </SelectLabel>
+                    <div
+                      className="relative"
+                      onMouseDown={(e) => e.preventDefault()}
+                    >
+                      {/* Preview models (first 3 visible, rest blurred) */}
+                      {(spaceModels.length > 0
+                        ? spaceModels.map((m) => m.name)
+                        : previewModelNames
+                      )
+                        .slice(0, 3)
+                        .map((name) => (
+                          <div
+                            key={name}
+                            className="relative flex w-full cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm text-muted-foreground/60"
+                          >
+                            {name}
+                          </div>
+                        ))}
+                      {/* Blurred remaining models with login overlay */}
+                      <div className="relative min-h-10">
+                        <div
+                          className="select-none overflow-hidden"
+                          style={{ maxHeight: '3rem' }}
+                        >
+                          {(spaceModels.length > 0
+                            ? spaceModels.map((m) => m.name)
+                            : previewModelNames
+                          )
+                            .slice(3)
+                            .map((name) => (
+                              <div
+                                key={name}
+                                className="flex w-full items-center py-1.5 pl-8 pr-2 text-sm text-muted-foreground/40 blur-[2px]"
+                              >
+                                {name}
+                              </div>
+                            ))}
+                        </div>
+                        {/* Login overlay */}
+                        <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-b from-transparent to-background/80">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-xs px-3 gap-1.5 shadow-sm"
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              handleSpaceLogin();
+                            }}
+                          >
+                            <Sparkles className="h-3 w-3" />
+                            {t('models.unlockModels')}
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </SelectGroup>
+                ) : !systemInfo.disable_models_service ? (
+                  // User is logged into Space — show space models normally
+                  Object.entries(groupedSpaceModels).map(
+                    ([providerName, models]) => (
+                      <SelectGroup key={providerName}>
+                        <SelectLabel>
+                          <span className="inline-flex items-center gap-1.5">
+                            <Sparkles className="h-3.5 w-3.5 text-purple-500" />
+                            {providerName}
+                          </span>
+                        </SelectLabel>
+                        {models.map((model) => (
+                          <SelectItem key={model.uuid} value={model.uuid}>
+                            <span className="inline-flex items-center gap-1">
+                              {model.name}
+                              {model.abilities?.includes('vision') && (
+                                <Eye className="h-3 w-3 text-muted-foreground" />
+                              )}
+                              {model.abilities?.includes('func_call') && (
+                                <Wrench className="h-3 w-3 text-muted-foreground" />
+                              )}
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    ),
+                  )
+                ) : null}
+              </SelectContent>
+            </Select>
+          </div>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 shrink-0"
+                onClick={() => {
+                  setSettingsSection('models');
+                  setModelsDialogOpen(true);
+                }}
+              >
+                <Settings className="h-4 w-4 text-muted-foreground" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="right">{t('models.title')}</TooltipContent>
+          </Tooltip>
+          <SettingsDialog
+            open={modelsDialogOpen}
+            onOpenChange={handleModelsDialogChange}
+            section={settingsSection}
+            onSectionChange={setSettingsSection}
+          />
+        </div>
+      );
+
+    case DynamicFormItemType.EMBEDDING_MODEL_SELECTOR: {
+      const spaceEmbeddingModels = embeddingModels.filter(
+        (m) => m.provider?.requester === LANGBOT_MODELS_PROVIDER_REQUESTER,
+      );
+      const regularEmbeddingModels = embeddingModels.filter(
+        (m) => m.provider?.requester !== LANGBOT_MODELS_PROVIDER_REQUESTER,
+      );
+
+      const groupedEmbeddingModels = regularEmbeddingModels.reduce(
+        (acc, model) => {
+          const providerName = model.provider?.name || 'Unknown';
+          if (!acc[providerName]) acc[providerName] = [];
+          acc[providerName].push(model);
+          return acc;
+        },
+        {} as Record<string, EmbeddingModel[]>,
+      );
+
+      const groupedSpaceEmbeddingModels = spaceEmbeddingModels.reduce(
+        (acc, model) => {
+          const providerName =
+            model.provider?.name || model.provider?.requester || 'Unknown';
+          if (!acc[providerName]) acc[providerName] = [];
+          acc[providerName].push(model);
+          return acc;
+        },
+        {} as Record<string, EmbeddingModel[]>,
+      );
+
+      const previewEmbeddingModelNames = [
+        'text-embedding-3-large',
+        'text-embedding-3-small',
+        'bge-m3',
+        'jina-embeddings-v3',
+        'qwen3-embedding-8b',
+      ];
+
+      return (
+        <div className="flex w-full max-w-md min-w-0 items-center gap-1.5">
+          <div className="min-w-0 flex-1">
+            <Select value={field.value} onValueChange={field.onChange}>
+              <SelectTrigger className="min-w-0 bg-[#ffffff] dark:bg-[#2a2a2e]">
+                <SelectValue
+                  placeholder={t('knowledge.selectEmbeddingModel')}
+                />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(groupedEmbeddingModels).map(
+                  ([providerName, models]) => (
+                    <SelectGroup key={providerName}>
+                      <SelectLabel>{providerName}</SelectLabel>
+                      {models.map((model) => (
+                        <SelectItem key={model.uuid} value={model.uuid}>
+                          {model.name}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  ),
+                )}
+                {showSpaceLoginCTA ? (
+                  <SelectGroup>
+                    <SelectLabel>
+                      <span className="inline-flex items-center gap-1.5">
+                        <Sparkles className="h-3.5 w-3.5 text-purple-500" />
+                        {t('models.langbotModels')}
+                        <Tooltip>
+                          <TooltipTrigger
+                            asChild
+                            onMouseDown={(e) => e.preventDefault()}
+                          >
+                            <Info className="h-3 w-3 text-muted-foreground cursor-help" />
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-[240px]">
+                            {t('models.spaceTrialTooltip')}
+                          </TooltipContent>
+                        </Tooltip>
+                      </span>
+                    </SelectLabel>
+                    <div
+                      className="relative"
+                      onMouseDown={(e) => e.preventDefault()}
+                    >
+                      {(spaceEmbeddingModels.length > 0
+                        ? spaceEmbeddingModels.map((m) => m.name)
+                        : previewEmbeddingModelNames
+                      )
+                        .slice(0, 3)
+                        .map((name) => (
+                          <div
+                            key={name}
+                            className="relative flex w-full cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm text-muted-foreground/60"
+                          >
+                            {name}
+                          </div>
+                        ))}
+                      <div className="relative min-h-10">
+                        <div
+                          className="select-none overflow-hidden"
+                          style={{ maxHeight: '3rem' }}
+                        >
+                          {(spaceEmbeddingModels.length > 0
+                            ? spaceEmbeddingModels.map((m) => m.name)
+                            : previewEmbeddingModelNames
+                          )
+                            .slice(3)
+                            .map((name) => (
+                              <div
+                                key={name}
+                                className="flex w-full items-center py-1.5 pl-8 pr-2 text-sm text-muted-foreground/40 blur-[2px]"
+                              >
+                                {name}
+                              </div>
+                            ))}
+                        </div>
+                        <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-b from-transparent to-background/80">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-xs px-3 gap-1.5 shadow-sm"
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              handleSpaceLogin();
+                            }}
+                          >
+                            <Sparkles className="h-3 w-3" />
+                            {t('models.unlockModels')}
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </SelectGroup>
+                ) : !systemInfo.disable_models_service ? (
+                  Object.entries(groupedSpaceEmbeddingModels).map(
+                    ([providerName, models]) => (
+                      <SelectGroup key={providerName}>
+                        <SelectLabel>
+                          <span className="inline-flex items-center gap-1.5">
+                            <Sparkles className="h-3.5 w-3.5 text-purple-500" />
+                            {providerName}
+                          </span>
+                        </SelectLabel>
+                        {models.map((model) => (
+                          <SelectItem key={model.uuid} value={model.uuid}>
+                            {model.name}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    ),
+                  )
+                ) : null}
+              </SelectContent>
+            </Select>
+          </div>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 shrink-0"
+                onClick={() => {
+                  setSettingsSection('models');
+                  setModelsDialogOpen(true);
+                }}
+              >
+                <Settings className="h-4 w-4 text-muted-foreground" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="right">{t('models.title')}</TooltipContent>
+          </Tooltip>
+          <SettingsDialog
+            open={modelsDialogOpen}
+            onOpenChange={handleModelsDialogChange}
+            section={settingsSection}
+            onSectionChange={setSettingsSection}
+          />
+        </div>
+      );
+    }
+
+    case DynamicFormItemType.RERANK_MODEL_SELECTOR:
+      const groupedRerankModels = rerankModels.reduce(
+        (acc, model) => {
+          const providerName = model.provider?.name || 'Unknown';
+          if (!acc[providerName]) acc[providerName] = [];
+          acc[providerName].push(model);
+          return acc;
+        },
+        {} as Record<string, RerankModel[]>,
+      );
+
+      return (
+        <div className="w-full max-w-md min-w-0">
+          <Select
+            value={field.value || '__none__'}
+            onValueChange={(v) => field.onChange(v === '__none__' ? '' : v)}
+          >
+            <SelectTrigger className="min-w-0 bg-[#ffffff] dark:bg-[#2a2a2e]">
+              <SelectValue placeholder={t('models.rerank')} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__">{t('common.none')}</SelectItem>
+              {Object.entries(groupedRerankModels).map(
+                ([providerName, models]) => (
+                  <SelectGroup key={providerName}>
+                    <SelectLabel>{providerName}</SelectLabel>
+                    {models.map((model) => (
+                      <SelectItem key={model.uuid} value={model.uuid}>
+                        {model.name}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                ),
+              )}
+            </SelectContent>
+          </Select>
+        </div>
+      );
+
+    case DynamicFormItemType.MODEL_FALLBACK_SELECTOR: {
+      // Separate space models from regular models
+      const fbSpaceModels = llmModels.filter(
+        (m) => m.provider?.requester === LANGBOT_MODELS_PROVIDER_REQUESTER,
+      );
+      const fbRegularModels = llmModels.filter(
+        (m) => m.provider?.requester !== LANGBOT_MODELS_PROVIDER_REQUESTER,
+      );
+
+      // Group regular models by provider
+      const groupedModelsForFallback = fbRegularModels.reduce(
+        (acc, model) => {
+          const providerName =
+            model.provider?.name || model.provider?.requester || 'Unknown';
+          if (!acc[providerName]) acc[providerName] = [];
+          acc[providerName].push(model);
+          return acc;
+        },
+        {} as Record<string, LLMModel[]>,
+      );
+
+      // Group space models by provider (for logged-in users)
+      const fbGroupedSpaceModels = fbSpaceModels.reduce(
+        (acc, model) => {
+          const providerName =
+            model.provider?.name || model.provider?.requester || 'Unknown';
+          if (!acc[providerName]) acc[providerName] = [];
+          acc[providerName].push(model);
+          return acc;
+        },
+        {} as Record<string, LLMModel[]>,
+      );
+
+      // Hardcoded preview model names for CTA
+      const fbPreviewModelNames = [
+        'gpt-4o',
+        'claude-sonnet-4-20250514',
+        'deepseek-chat',
+        'gemini-2.5-flash',
+        'qwen-plus',
+      ];
+
+      const rawModelValue = field.value;
+      const modelValue: { primary: string; fallbacks: string[] } =
+        rawModelValue != null &&
+        typeof rawModelValue === 'object' &&
+        !Array.isArray(rawModelValue)
+          ? {
+              primary:
+                typeof (rawModelValue as Record<string, unknown>).primary ===
+                'string'
+                  ? ((rawModelValue as Record<string, unknown>)
+                      .primary as string)
+                  : '',
+              fallbacks: Array.isArray(
+                (rawModelValue as Record<string, unknown>).fallbacks,
+              )
+                ? (
+                    (rawModelValue as Record<string, unknown>)
+                      .fallbacks as unknown[]
+                  ).filter((v): v is string => typeof v === 'string')
+                : [],
+            }
+          : {
+              primary: typeof rawModelValue === 'string' ? rawModelValue : '',
+              fallbacks: [],
+            };
+
+      const renderModelSelect = (
+        value: string,
+        onChange: (val: string) => void,
+        placeholder: string,
+      ) => (
+        <Select value={value} onValueChange={onChange}>
+          <SelectTrigger className="min-w-0 bg-[#ffffff] dark:bg-[#2a2a2e]">
+            <SelectValue placeholder={placeholder} />
           </SelectTrigger>
           <SelectContent>
-            <SelectGroup>
-              {llmModels.map((model) => (
-                <HoverCard key={model.uuid} openDelay={0} closeDelay={0}>
-                  <HoverCardTrigger asChild>
-                    <SelectItem value={model.uuid}>{model.name}</SelectItem>
-                  </HoverCardTrigger>
-                  <HoverCardContent
-                    className="w-80 data-[state=open]:animate-none data-[state=closed]:animate-none"
-                    align="end"
-                    side="right"
-                    sideOffset={10}
-                  >
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <img
-                          src={httpClient.getProviderRequesterIconURL(
-                            model.requester,
-                          )}
-                          alt="icon"
-                          className="w-8 h-8 rounded-[8%]"
-                        />
-                        <h4 className="font-medium">{model.name}</h4>
-                      </div>
-                      <p className="text-sm text-muted-foreground">
-                        {model.description}
-                      </p>
-                      {model.requester_config && (
-                        <div className="flex items-center gap-1 text-xs">
-                          <svg
-                            className="w-4 h-4 text-gray-500"
-                            xmlns="http://www.w3.org/2000/svg"
-                            viewBox="0 0 24 24"
-                            fill="currentColor"
-                          >
-                            <path d="M13.0607 8.11097L14.4749 9.52518C17.2086 12.2589 17.2086 16.691 14.4749 19.4247L14.1214 19.7782C11.3877 22.5119 6.95555 22.5119 4.22188 19.7782C1.48821 17.0446 1.48821 12.6124 4.22188 9.87874L5.6361 11.293C3.68348 13.2456 3.68348 16.4114 5.6361 18.364C7.58872 20.3166 10.7545 20.3166 12.7072 18.364L13.0607 18.0105C15.0133 16.0578 15.0133 12.892 13.0607 10.9394L11.6465 9.52518L13.0607 8.11097ZM19.7782 14.1214L18.364 12.7072C20.3166 10.7545 20.3166 7.58872 18.364 5.6361C16.4114 3.68348 13.2456 3.68348 11.293 5.6361L10.9394 5.98965C8.98678 7.94227 8.98678 11.1081 10.9394 13.0607L12.3536 14.4749L10.9394 15.8891L9.52518 14.4749C6.79151 11.7413 6.79151 7.30911 9.52518 4.57544L9.87874 4.22188C12.6124 1.48821 17.0446 1.48821 19.7782 4.22188C22.5119 6.95555 22.5119 11.3877 19.7782 14.1214Z"></path>
-                          </svg>
-                          <span className="font-semibold">Base URL：</span>
-                          {model.requester_config.base_url}
-                        </div>
-                      )}
-                      {model.abilities && model.abilities.length > 0 && (
-                        <div className="flex flex-wrap gap-1">
-                          {model.abilities.map((ability) => (
-                            <div
-                              key={ability}
-                              className="flex items-center gap-1 px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-600"
-                            >
-                              {ability === 'vision' && (
-                                <svg
-                                  className="w-3 h-3"
-                                  xmlns="http://www.w3.org/2000/svg"
-                                  viewBox="0 0 24 24"
-                                  fill="currentColor"
-                                >
-                                  <path d="M12 2C17.5228 2 22 6.47715 22 12C22 17.5228 17.5228 22 12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2ZM12 4C7.58172 4 4 7.58172 4 12C4 16.4183 7.58172 20 12 20C16.4183 20 20 16.4183 20 12C20 7.58172 16.4183 4 12 4ZM12 7C14.7614 7 17 9.23858 17 12C17 14.7614 14.7614 17 12 17C9.23858 17 7 14.7614 7 12C7 11.4872 7.07719 10.9925 7.22057 10.5268C7.61175 11.3954 8.48527 12 9.5 12C10.8807 12 12 10.8807 12 9.5C12 8.48527 11.3954 7.61175 10.5269 7.21995C10.9925 7.07719 11.4872 7 12 7Z"></path>
-                                </svg>
-                              )}
-                              {ability === 'func_call' && (
-                                <svg
-                                  className="w-3 h-3"
-                                  xmlns="http://www.w3.org/2000/svg"
-                                  viewBox="0 0 24 24"
-                                  fill="currentColor"
-                                >
-                                  <path d="M5.32943 3.27158C6.56252 2.8332 7.9923 3.10749 8.97927 4.09446C10.1002 5.21537 10.3019 6.90741 9.5843 8.23385L20.293 18.9437L18.8788 20.3579L8.16982 9.64875C6.84325 10.3669 5.15069 10.1654 4.02952 9.04421C3.04227 8.05696 2.7681 6.62665 3.20701 5.39332L5.44373 7.63C6.02952 8.21578 6.97927 8.21578 7.56505 7.63C8.15084 7.04421 8.15084 6.09446 7.56505 5.50868L5.32943 3.27158ZM15.6968 5.15512L18.8788 3.38736L20.293 4.80157L18.5252 7.98355L16.7574 8.3371L14.6361 10.4584L13.2219 9.04421L15.3432 6.92289L15.6968 5.15512ZM8.97927 13.2868L10.3935 14.7011L5.09018 20.0044C4.69966 20.3949 4.06649 20.3949 3.67597 20.0044C3.31334 19.6417 3.28744 19.0699 3.59826 18.6774L3.67597 18.5902L8.97927 13.2868Z"></path>
-                                </svg>
-                              )}
-                              <span>
-                                {ability === 'vision'
-                                  ? t('models.visionAbility')
-                                  : ability === 'func_call'
-                                    ? t('models.functionCallAbility')
-                                    : ability}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                      {model.extra_args &&
-                        Object.keys(model.extra_args).length > 0 && (
-                          <div className="text-xs">
-                            <div className="font-semibold mb-1">
-                              {t('models.extraParameters')}
-                            </div>
-                            <div className="space-y-1">
-                              {Object.entries(
-                                model.extra_args as Record<string, unknown>,
-                              ).map(([key, value]) => (
-                                <div
-                                  key={key}
-                                  className="flex items-center gap-1"
-                                >
-                                  <span className="text-gray-500">{key}：</span>
-                                  <span className="break-all">
-                                    {JSON.stringify(value)}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
+            {Object.entries(groupedModelsForFallback).map(
+              ([providerName, models]) => (
+                <SelectGroup key={providerName}>
+                  <SelectLabel>{providerName}</SelectLabel>
+                  {models.map((model) => (
+                    <SelectItem key={model.uuid} value={model.uuid}>
+                      <span className="inline-flex items-center gap-1">
+                        {model.name}
+                        {model.abilities?.includes('vision') && (
+                          <Eye className="h-3 w-3 text-muted-foreground" />
                         )}
+                        {model.abilities?.includes('func_call') && (
+                          <Wrench className="h-3 w-3 text-muted-foreground" />
+                        )}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              ),
+            )}
+            {/* Space models section */}
+            {showSpaceLoginCTA ? (
+              <SelectGroup>
+                <SelectLabel>
+                  <span className="inline-flex items-center gap-1.5">
+                    <Sparkles className="h-3.5 w-3.5 text-purple-500" />
+                    {t('models.langbotModels')}
+                    <Tooltip>
+                      <TooltipTrigger
+                        asChild
+                        onMouseDown={(e) => e.preventDefault()}
+                      >
+                        <Info className="h-3 w-3 text-muted-foreground cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-[240px]">
+                        {t('models.spaceTrialTooltip')}
+                      </TooltipContent>
+                    </Tooltip>
+                  </span>
+                </SelectLabel>
+                <div
+                  className="relative"
+                  onMouseDown={(e) => e.preventDefault()}
+                >
+                  {/* Preview models (first 3 visible, rest blurred) */}
+                  {(fbSpaceModels.length > 0
+                    ? fbSpaceModels.map((m) => m.name)
+                    : fbPreviewModelNames
+                  )
+                    .slice(0, 3)
+                    .map((name) => (
+                      <div
+                        key={name}
+                        className="relative flex w-full cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm text-muted-foreground/60"
+                      >
+                        {name}
+                      </div>
+                    ))}
+                  {/* Blurred remaining models with login overlay */}
+                  <div className="relative min-h-10">
+                    <div
+                      className="select-none overflow-hidden"
+                      style={{ maxHeight: '3rem' }}
+                    >
+                      {(fbSpaceModels.length > 0
+                        ? fbSpaceModels.map((m) => m.name)
+                        : fbPreviewModelNames
+                      )
+                        .slice(3)
+                        .map((name) => (
+                          <div
+                            key={name}
+                            className="flex w-full items-center py-1.5 pl-8 pr-2 text-sm text-muted-foreground/40 blur-[2px]"
+                          >
+                            {name}
+                          </div>
+                        ))}
                     </div>
-                  </HoverCardContent>
-                </HoverCard>
-              ))}
-            </SelectGroup>
+                    {/* Login overlay */}
+                    <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-b from-transparent to-background/80">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs px-3 gap-1.5 shadow-sm"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleSpaceLogin();
+                        }}
+                      >
+                        <Sparkles className="h-3 w-3" />
+                        {t('models.unlockModels')}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </SelectGroup>
+            ) : !systemInfo.disable_models_service ? (
+              // User is logged into Space — show space models normally
+              Object.entries(fbGroupedSpaceModels).map(
+                ([providerName, models]) => (
+                  <SelectGroup key={providerName}>
+                    <SelectLabel>
+                      <span className="inline-flex items-center gap-1.5">
+                        <Sparkles className="h-3.5 w-3.5 text-purple-500" />
+                        {providerName}
+                      </span>
+                    </SelectLabel>
+                    {models.map((model) => (
+                      <SelectItem key={model.uuid} value={model.uuid}>
+                        <span className="inline-flex items-center gap-1">
+                          {model.name}
+                          {model.abilities?.includes('vision') && (
+                            <Eye className="h-3 w-3 text-muted-foreground" />
+                          )}
+                          {model.abilities?.includes('func_call') && (
+                            <Wrench className="h-3 w-3 text-muted-foreground" />
+                          )}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                ),
+              )
+            ) : null}
           </SelectContent>
         </Select>
       );
 
+      const updateValue = (patch: Partial<typeof modelValue>) => {
+        field.onChange({ ...modelValue, ...patch });
+      };
+
+      const addFallbackModel = () => {
+        updateValue({ fallbacks: [...modelValue.fallbacks, ''] });
+      };
+
+      const updateFallbackModel = (index: number, value: string) => {
+        const updated = [...modelValue.fallbacks];
+        updated[index] = value;
+        updateValue({ fallbacks: updated });
+      };
+
+      const removeFallbackModel = (index: number) => {
+        const updated = [...modelValue.fallbacks];
+        updated.splice(index, 1);
+        updateValue({ fallbacks: updated });
+      };
+
+      const moveFallbackModel = (index: number, direction: 'up' | 'down') => {
+        const updated = [...modelValue.fallbacks];
+        const newIndex = direction === 'up' ? index - 1 : index + 1;
+        if (newIndex < 0 || newIndex >= updated.length) return;
+        [updated[index], updated[newIndex]] = [
+          updated[newIndex],
+          updated[index],
+        ];
+        updateValue({ fallbacks: updated });
+      };
+
+      return (
+        <div className="w-full min-w-0 space-y-3">
+          {/* Primary model selector */}
+          <div>
+            <p className="text-xs text-muted-foreground mb-1">
+              {t('models.fallback.primary')}
+            </p>
+            <div className="flex min-w-0 items-center gap-1.5">
+              <div className="min-w-0 flex-1">
+                {renderModelSelect(
+                  modelValue.primary,
+                  (val) => updateValue({ primary: val }),
+                  t('models.selectModel'),
+                )}
+              </div>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-9 w-9 shrink-0"
+                    onClick={() => setModelsDialogOpen(true)}
+                  >
+                    <Settings className="h-4 w-4 text-muted-foreground" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="right">
+                  {t('models.title')}
+                </TooltipContent>
+              </Tooltip>
+              <SettingsDialog
+                open={modelsDialogOpen}
+                onOpenChange={handleModelsDialogChange}
+                section={settingsSection}
+                onSectionChange={setSettingsSection}
+              />
+            </div>
+          </div>
+
+          {/* Fallback models */}
+          {modelValue.fallbacks.length > 0 && (
+            <div className="min-w-0 space-y-2">
+              <p className="text-xs text-muted-foreground">
+                {t('models.fallback.fallbackList')}
+              </p>
+              {modelValue.fallbacks.map((fbUuid: string, index: number) => (
+                <div key={index} className="flex min-w-0 items-center gap-2">
+                  <span className="text-xs text-muted-foreground w-4 shrink-0">
+                    {index + 1}.
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    {renderModelSelect(
+                      fbUuid,
+                      (val) => updateFallbackModel(index, val),
+                      t('models.selectModel'),
+                    )}
+                  </div>
+                  <div className="flex gap-1 shrink-0">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 p-0"
+                      onClick={() => moveFallbackModel(index, 'up')}
+                      disabled={index === 0}
+                    >
+                      ↑
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 p-0"
+                      onClick={() => moveFallbackModel(index, 'down')}
+                      disabled={index === modelValue.fallbacks.length - 1}
+                    >
+                      ↓
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                      onClick={() => removeFallbackModel(index)}
+                    >
+                      <Trash2 className="size-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Add fallback button */}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="w-full border-dashed text-muted-foreground hover:text-foreground"
+            onClick={addFallbackModel}
+          >
+            <Plus className="size-4 mr-1.5" />
+            {t('models.fallback.addFallback')}
+          </Button>
+        </div>
+      );
+    }
+
     case DynamicFormItemType.KNOWLEDGE_BASE_SELECTOR:
+      // Group KBs by Knowledge Engine name
+      const validKnowledgeBases = knowledgeBases.filter(hasUsableUuid);
+      const kbsByEngine = validKnowledgeBases.reduce(
+        (acc, kb) => {
+          const engineName = kb.knowledge_engine?.name
+            ? extractI18nObject(kb.knowledge_engine.name)
+            : t('knowledge.unknownEngine');
+          if (!acc[engineName]) {
+            acc[engineName] = [];
+          }
+          acc[engineName].push(kb);
+          return acc;
+        },
+        {} as Record<string, typeof validKnowledgeBases>,
+      );
+
       return (
         <Select value={field.value} onValueChange={field.onChange}>
-          <SelectTrigger className="bg-[#ffffff] dark:bg-[#2a2a2e]">
-            <SelectValue placeholder={t('knowledge.selectKnowledgeBase')} />
+          <SelectTrigger className="min-w-0 bg-[#ffffff] dark:bg-[#2a2a2e]">
+            {field.value && field.value !== '__none__' ? (
+              (() => {
+                const selectedKb = validKnowledgeBases.find(
+                  (kb) => kb.uuid === field.value,
+                );
+                return (
+                  <div className="flex min-w-0 items-center gap-2">
+                    {selectedKb?.emoji && (
+                      <span className="text-sm shrink-0">
+                        {selectedKb.emoji}
+                      </span>
+                    )}
+                    <span className="truncate">
+                      {selectedKb?.name ?? field.value}
+                    </span>
+                  </div>
+                );
+              })()
+            ) : (
+              <SelectValue placeholder={t('knowledge.selectKnowledgeBase')} />
+            )}
           </SelectTrigger>
           <SelectContent>
             <SelectGroup>
               <SelectItem value="__none__">{t('knowledge.empty')}</SelectItem>
             </SelectGroup>
 
-            {knowledgeBases.length > 0 && (
-              <SelectGroup>
-                <SelectLabel>{t('knowledge.builtIn')}</SelectLabel>
-                {knowledgeBases.map((base) => (
-                  <SelectItem key={base.uuid} value={base.uuid ?? ''}>
-                    {base.name}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            )}
-
-            {externalKnowledgeBases.length > 0 && (
-              <SelectGroup>
-                <SelectLabel>{t('knowledge.external')}</SelectLabel>
-                {externalKnowledgeBases.map((base) => (
-                  <SelectItem key={base.uuid} value={base.uuid ?? ''}>
+            {Object.entries(kbsByEngine).map(([engineName, kbs]) => (
+              <SelectGroup key={engineName}>
+                <SelectLabel>{engineName}</SelectLabel>
+                {kbs.map((base) => (
+                  <SelectItem key={base.uuid} value={base.uuid}>
                     <div className="flex items-center gap-2">
-                      <img
-                        src={httpClient.getPluginIconURL(
-                          base.plugin_author,
-                          base.plugin_name,
-                        )}
-                        alt="plugin icon"
-                        className="w-4 h-4 rounded-[8%] flex-shrink-0"
-                      />
+                      {base.emoji && (
+                        <span className="text-sm shrink-0">{base.emoji}</span>
+                      )}
                       <span>{base.name}</span>
                     </div>
                   </SelectItem>
                 ))}
               </SelectGroup>
-            )}
+            ))}
           </SelectContent>
         </Select>
       );
 
     case DynamicFormItemType.KNOWLEDGE_BASE_MULTI_SELECTOR:
+      // Group KBs by Knowledge Engine name for multi-selector
+      const validMultiKnowledgeBases = knowledgeBases.filter(hasUsableUuid);
+      const multiKbsByEngine = validMultiKnowledgeBases.reduce(
+        (acc, kb) => {
+          const engineName = kb.knowledge_engine?.name
+            ? extractI18nObject(kb.knowledge_engine.name)
+            : t('knowledge.unknownEngine');
+          if (!acc[engineName]) {
+            acc[engineName] = [];
+          }
+          acc[engineName].push(kb);
+          return acc;
+        },
+        {} as Record<string, typeof validMultiKnowledgeBases>,
+      );
+
       return (
         <>
-          <div className="space-y-2">
+          <div className="min-w-0 space-y-2">
             {field.value && field.value.length > 0 ? (
-              <div className="space-y-2">
+              <div className="min-w-0 space-y-2">
                 {field.value.map((kbId: string) => {
-                  const kb = knowledgeBases.find((base) => base.uuid === kbId);
-                  const externalKb = externalKnowledgeBases.find(
+                  const currentKb = validMultiKnowledgeBases.find(
                     (base) => base.uuid === kbId,
                   );
-                  const currentKb = kb || externalKb;
                   if (!currentKb) return null;
 
                   return (
                     <div
                       key={kbId}
-                      className="flex items-center justify-between rounded-lg border p-3 hover:bg-accent"
+                      className="flex min-w-0 items-center justify-between rounded-lg border p-3 hover:bg-accent"
                     >
-                      <div className="flex items-center gap-2 flex-1">
-                        {externalKb && (
-                          <img
-                            src={httpClient.getPluginIconURL(
-                              externalKb.plugin_author,
-                              externalKb.plugin_name,
-                            )}
-                            alt="plugin icon"
-                            className="w-8 h-8 rounded-[8%] flex-shrink-0"
-                          />
-                        )}
+                      <div className="flex min-w-0 flex-1 items-center gap-2">
                         <div className="flex-1 min-w-0">
-                          <div className="font-medium">{currentKb.name}</div>
+                          <div className="flex min-w-0 items-center gap-2 font-medium">
+                            {currentKb.emoji && (
+                              <span className="text-sm shrink-0">
+                                {currentKb.emoji}
+                              </span>
+                            )}
+                            <span className="truncate">{currentKb.name}</span>
+                            {currentKb.knowledge_engine?.name && (
+                              <span className="text-xs px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300">
+                                {extractI18nObject(
+                                  currentKb.knowledge_engine.name,
+                                )}
+                              </span>
+                            )}
+                          </div>
                           {currentKb.description && (
-                            <div className="text-sm text-muted-foreground">
+                            <div className="text-sm break-words text-muted-foreground">
                               {currentKb.description}
                             </div>
                           )}
@@ -501,22 +1353,19 @@ export default function DynamicFormItemComponent({
                 <DialogTitle>{t('knowledge.selectKnowledgeBases')}</DialogTitle>
               </DialogHeader>
               <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-                {/* Built-in Knowledge Bases */}
-                {knowledgeBases.length > 0 && (
-                  <div className="space-y-2">
+                {Object.entries(multiKbsByEngine).map(([engineName, kbs]) => (
+                  <div key={engineName} className="space-y-2">
                     <div className="text-sm font-semibold text-muted-foreground px-2">
-                      {t('knowledge.builtIn')}
+                      {engineName}
                     </div>
-                    {knowledgeBases.map((base) => {
-                      const isSelected = tempSelectedKBIds.includes(
-                        base.uuid ?? '',
-                      );
+                    {kbs.map((base) => {
+                      const isSelected = tempSelectedKBIds.includes(base.uuid);
                       return (
                         <div
                           key={base.uuid}
                           className="flex items-center gap-3 rounded-lg border p-3 hover:bg-accent cursor-pointer"
                           onClick={() => {
-                            const kbId = base.uuid ?? '';
+                            const kbId = base.uuid;
                             setTempSelectedKBIds((prev) =>
                               prev.includes(kbId)
                                 ? prev.filter((id) => id !== kbId)
@@ -529,7 +1378,14 @@ export default function DynamicFormItemComponent({
                             aria-label={`Select ${base.name}`}
                           />
                           <div className="flex-1">
-                            <div className="font-medium">{base.name}</div>
+                            <div className="font-medium flex items-center gap-2">
+                              {base.emoji && (
+                                <span className="text-sm shrink-0">
+                                  {base.emoji}
+                                </span>
+                              )}
+                              {base.name}
+                            </div>
                             {base.description && (
                               <div className="text-sm text-muted-foreground">
                                 {base.description}
@@ -540,56 +1396,7 @@ export default function DynamicFormItemComponent({
                       );
                     })}
                   </div>
-                )}
-
-                {/* External Knowledge Bases */}
-                {externalKnowledgeBases.length > 0 && (
-                  <div className="space-y-2">
-                    <div className="text-sm font-semibold text-muted-foreground px-2">
-                      {t('knowledge.external')}
-                    </div>
-                    {externalKnowledgeBases.map((base) => {
-                      const isSelected = tempSelectedKBIds.includes(
-                        base.uuid ?? '',
-                      );
-                      return (
-                        <div
-                          key={base.uuid}
-                          className="flex items-center gap-3 rounded-lg border p-3 hover:bg-accent cursor-pointer"
-                          onClick={() => {
-                            const kbId = base.uuid ?? '';
-                            setTempSelectedKBIds((prev) =>
-                              prev.includes(kbId)
-                                ? prev.filter((id) => id !== kbId)
-                                : [...prev, kbId],
-                            );
-                          }}
-                        >
-                          <Checkbox
-                            checked={isSelected}
-                            aria-label={`Select ${base.name}`}
-                          />
-                          <img
-                            src={httpClient.getPluginIconURL(
-                              base.plugin_author,
-                              base.plugin_name,
-                            )}
-                            alt="plugin icon"
-                            className="w-8 h-8 rounded-[8%] flex-shrink-0"
-                          />
-                          <div className="flex-1">
-                            <div className="font-medium">{base.name}</div>
-                            {base.description && (
-                              <div className="text-sm text-muted-foreground">
-                                {base.description}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
+                ))}
               </div>
               <DialogFooter>
                 <Button
@@ -615,13 +1422,13 @@ export default function DynamicFormItemComponent({
     case DynamicFormItemType.BOT_SELECTOR:
       return (
         <Select value={field.value} onValueChange={field.onChange}>
-          <SelectTrigger className="bg-[#ffffff] dark:bg-[#2a2a2e]">
+          <SelectTrigger className="min-w-0 bg-[#ffffff] dark:bg-[#2a2a2e]">
             <SelectValue placeholder={t('bots.selectBot')} />
           </SelectTrigger>
           <SelectContent>
             <SelectGroup>
-              {bots.map((bot) => (
-                <SelectItem key={bot.uuid} value={bot.uuid ?? ''}>
+              {bots.filter(hasUsableUuid).map((bot) => (
+                <SelectItem key={bot.uuid} value={bot.uuid}>
                   {bot.name}
                 </SelectItem>
               ))}
@@ -630,22 +1437,192 @@ export default function DynamicFormItemComponent({
         </Select>
       );
 
-    case DynamicFormItemType.PROMPT_EDITOR:
+    case DynamicFormItemType.TOOLS_SELECTOR:
       return (
-        <div className="space-y-2">
-          {field.value.map(
+        <>
+          <div className="min-w-0 space-y-2">
+            {field.value && field.value.length > 0 ? (
+              <div className="min-w-0 space-y-2">
+                {field.value.map((toolName: string) => {
+                  const currentTool = tools.find(
+                    (tool) => tool.name === toolName,
+                  );
+
+                  return (
+                    <div
+                      key={toolName}
+                      className="flex min-w-0 items-center justify-between rounded-lg border p-3 hover:bg-accent"
+                    >
+                      <div className="flex min-w-0 flex-1 items-center gap-2">
+                        <Wrench className="h-4 w-4 shrink-0 text-muted-foreground" />
+                        <div className="flex-1 min-w-0">
+                          <div className="truncate font-medium">{toolName}</div>
+                          {currentTool?.human_desc && (
+                            <div className="text-sm text-muted-foreground truncate">
+                              {currentTool.human_desc}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          const newValue = field.value.filter(
+                            (name: string) => name !== toolName,
+                          );
+                          field.onChange(newValue);
+                        }}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="flex h-32 items-center justify-center rounded-lg border-2 border-dashed border-border">
+                <p className="text-sm text-muted-foreground">
+                  {t('tools.noToolSelected', 'No tools selected')}
+                </p>
+              </div>
+            )}
+          </div>
+
+          <Button
+            type="button"
+            onClick={() => {
+              setTempSelectedToolNames(field.value || []);
+              setToolsDialogOpen(true);
+            }}
+            variant="outline"
+            className="w-full"
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            {t('tools.addTool', 'Add Tool')}
+          </Button>
+
+          <Dialog open={toolsDialogOpen} onOpenChange={setToolsDialogOpen}>
+            <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
+              <DialogHeader>
+                <DialogTitle>
+                  {t('tools.selectTools', 'Select Tools')}
+                </DialogTitle>
+              </DialogHeader>
+              <div className="flex-1 overflow-y-auto space-y-2 pr-2">
+                {tools.map((tool) => {
+                  const isSelected = tempSelectedToolNames.includes(tool.name);
+                  return (
+                    <div
+                      key={tool.name}
+                      className="flex items-center gap-3 rounded-lg border p-3 hover:bg-accent cursor-pointer"
+                      onClick={() => {
+                        setTempSelectedToolNames((prev) =>
+                          prev.includes(tool.name)
+                            ? prev.filter((name) => name !== tool.name)
+                            : [...prev, tool.name],
+                        );
+                      }}
+                    >
+                      <Checkbox
+                        checked={isSelected}
+                        aria-label={`Select ${tool.name}`}
+                      />
+                      <Wrench className="h-4 w-4 shrink-0 text-muted-foreground" />
+                      <div className="flex-1">
+                        <div className="font-medium">{tool.name}</div>
+                        {tool.human_desc && (
+                          <div className="text-sm text-muted-foreground">
+                            {tool.human_desc}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+                {tools.length === 0 && (
+                  <div className="flex h-32 items-center justify-center">
+                    <p className="text-sm text-muted-foreground">
+                      {t('tools.noToolsAvailable', 'No tools available')}
+                    </p>
+                  </div>
+                )}
+              </div>
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => setToolsDialogOpen(false)}
+                >
+                  {t('common.cancel')}
+                </Button>
+                <Button
+                  onClick={() => {
+                    field.onChange(tempSelectedToolNames);
+                    setToolsDialogOpen(false);
+                  }}
+                >
+                  {t('common.confirm')}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </>
+      );
+
+    case DynamicFormItemType.RICH_TOOLS_SELECTOR:
+      return (
+        <ToolResourceSelectors
+          mode="tools"
+          pipelineId={systemContext?.pipeline_id as string | undefined}
+          value={{
+            ...(formValues || {}),
+            [field.name]: field.value,
+          }}
+          onChange={handleCompositePatch}
+        />
+      );
+
+    case DynamicFormItemType.RESOURCES_SELECTOR:
+      return (
+        <ToolResourceSelectors
+          mode="resources"
+          pipelineId={systemContext?.pipeline_id as string | undefined}
+          value={{
+            ...(formValues || {}),
+            [field.name]: field.value,
+          }}
+          onChange={handleCompositePatch}
+        />
+      );
+
+    case DynamicFormItemType.PROMPT_EDITOR: {
+      // Guard: field.value may be undefined when the form resets or
+      // initialValues haven't propagated yet. Fall back to a default
+      // single system-prompt entry to prevent the .map() crash.
+      const promptItems: { role: string; content: string }[] = Array.isArray(
+        field.value,
+      )
+        ? field.value
+        : [{ role: 'system', content: '' }];
+      return (
+        <div className="min-w-0 space-y-2">
+          {promptItems.map(
             (item: { role: string; content: string }, index: number) => (
-              <div key={index} className="flex gap-2 items-center">
+              <div
+                key={index}
+                className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center"
+              >
                 {/* 角色选择 */}
                 {index === 0 ? (
-                  <div className="w-[120px] px-3 py-2 border rounded bg-gray-50 dark:bg-[#2a292e] text-gray-500 dark:text-white dark:border-gray-600">
+                  <div className="w-full shrink-0 rounded border bg-gray-50 px-3 py-2 text-gray-500 sm:w-[120px] dark:border-gray-600 dark:bg-[#2a292e] dark:text-white">
                     system
                   </div>
                 ) : (
                   <Select
                     value={item.role}
                     onValueChange={(value) => {
-                      const newValue = [...field.value];
+                      const newValue = [...(field.value ?? promptItems)];
                       newValue[index] = { ...newValue[index], role: value };
                       field.onChange(newValue);
                     }}
@@ -663,10 +1640,10 @@ export default function DynamicFormItemComponent({
                 )}
                 {/* 内容输入 */}
                 <Textarea
-                  className="w-[300px]"
+                  className="min-h-20 w-full min-w-0 flex-1 resize-y overflow-x-hidden break-all sm:w-[300px]"
                   value={item.content}
                   onChange={(e) => {
-                    const newValue = [...field.value];
+                    const newValue = [...(field.value ?? promptItems)];
                     newValue[index] = {
                       ...newValue[index],
                       content: e.target.value,
@@ -680,21 +1657,13 @@ export default function DynamicFormItemComponent({
                     type="button"
                     className="p-2 hover:bg-gray-100 rounded"
                     onClick={() => {
-                      const newValue = field.value.filter(
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                      const newValue = (field.value ?? promptItems).filter(
                         (_: any, i: number) => i !== index,
                       );
                       field.onChange(newValue);
                     }}
                   >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      viewBox="0 0 24 24"
-                      fill="currentColor"
-                      className="w-5 h-5 text-red-500"
-                    >
-                      <path d="M7 4V2H17V4H22V6H20V21C20 21.5523 19.5523 22 19 22H5C4.44772 22 4 21.5523 4 21V6H2V4H7ZM6 6V20H18V6H6ZM9 9H11V17H9V9ZM13 9H15V17H13V9Z"></path>
-                    </svg>
+                    <Trash2 className="w-5 h-5 text-red-500" />
                   </button>
                 )}
               </div>
@@ -704,13 +1673,17 @@ export default function DynamicFormItemComponent({
             type="button"
             variant="outline"
             onClick={() => {
-              field.onChange([...field.value, { role: 'user', content: '' }]);
+              field.onChange([
+                ...(field.value ?? promptItems),
+                { role: 'user', content: '' },
+              ]);
             }}
           >
             {t('common.addRound')}
           </Button>
         </div>
       );
+    }
 
     case DynamicFormItemType.FILE:
       return (
@@ -741,14 +1714,7 @@ export default function DynamicFormItemComponent({
                   }}
                   title={t('common.delete')}
                 >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    viewBox="0 0 24 24"
-                    fill="currentColor"
-                    className="w-4 h-4 text-destructive"
-                  >
-                    <path d="M7 4V2H17V4H22V6H20V21C20 21.5523 19.5523 22 19 22H5C4.44772 22 4 21.5523 4 21V6H2V4H7ZM6 6V20H18V6H6ZM9 9H11V17H9V9ZM13 9H15V17H13V9Z"></path>
-                  </svg>
+                  <Trash2 className="w-4 h-4 text-destructive" />
                 </Button>
               </CardContent>
             </Card>
@@ -780,14 +1746,7 @@ export default function DynamicFormItemComponent({
                   document.getElementById(`file-input-${config.name}`)?.click()
                 }
               >
-                <svg
-                  className="w-4 h-4 mr-2"
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 24 24"
-                  fill="currentColor"
-                >
-                  <path d="M11 11V5H13V11H19V13H13V19H11V13H5V11H11Z"></path>
-                </svg>
+                <Plus className="w-4 h-4 mr-2" />
                 {uploading
                   ? t('plugins.fileUpload.uploading')
                   : t('plugins.fileUpload.chooseFile')}
@@ -833,14 +1792,7 @@ export default function DynamicFormItemComponent({
                     }}
                     title={t('common.delete')}
                   >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      viewBox="0 0 24 24"
-                      fill="currentColor"
-                      className="w-4 h-4 text-destructive"
-                    >
-                      <path d="M7 4V2H17V4H22V6H20V21C20 21.5523 19.5523 22 19 22H5C4.44772 22 4 21.5523 4 21V6H2V4H7ZM6 6V20H18V6H6ZM9 9H11V17H9V9ZM13 9H15V17H13V9Z"></path>
-                    </svg>
+                    <Trash2 className="w-4 h-4 text-destructive" />
                   </Button>
                 </CardContent>
               </Card>
@@ -875,14 +1827,7 @@ export default function DynamicFormItemComponent({
                   ?.click()
               }
             >
-              <svg
-                className="w-4 h-4 mr-2"
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                fill="currentColor"
-              >
-                <path d="M11 11V5H13V11H19V13H13V19H11V13H5V11H11Z"></path>
-              </svg>
+              <Plus className="w-4 h-4 mr-2" />
               {uploading
                 ? t('plugins.fileUpload.uploading')
                 : t('plugins.fileUpload.addFile')}

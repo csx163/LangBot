@@ -1,147 +1,149 @@
 <p align="center">
 <a href="https://langbot.app">
-<img width="130" src="https://docs.langbot.app/langbot-logo.png" alt="LangBot"/>
+<img width="130" src="res/logo-blue.png" alt="LangBot"/>
 </a>
 
-<div align="center"><a href="https://hellogithub.com/repository/langbot-app/LangBot" target="_blank"><img src="https://abroad.hellogithub.com/v1/widgets/recommend.svg?rid=5ce8ae2aa4f74316bf393b57b952433c&claim_uid=gtmc6YWjMZkT21R" alt="Featured｜HelloGitHub" style="width: 250px; height: 54px;" width="250" height="54" /></a>
+<div align="center">
 
-<h3>使用 LangBot 快速建構、除錯和部署 IM 機器人。</h3>
+<a href="https://hellogithub.com/repository/langbot-app/LangBot" target="_blank"><img src="https://abroad.hellogithub.com/v1/widgets/recommend.svg?rid=5ce8ae2aa4f74316bf393b57b952433c&claim_uid=gtmc6YWjMZkT21R" alt="Featured｜HelloGitHub" style="width: 250px; height: 54px;" width="250" height="54" /></a>
 
-[English](README_EN.md) / [简体中文](README.md) / 繁體中文 / [日本語](README_JP.md) / [Español](README_ES.md) / [Français](README_FR.md) / [한국어](README_KO.md) / [Русский](README_RU.md) / [Tiếng Việt](README_VI.md)
+<h3>生產級 AI 即時通訊機器人開發平台。</h3>
+<h4>快速建構、除錯和部署 AI 機器人到微信、QQ、飛書、Slack、Discord、Telegram 等平台。</h4>
+
+[English](README.md) / [简体中文](README_CN.md) / 繁體中文 / [日本語](README_JP.md) / [Español](README_ES.md) / [Français](README_FR.md) / [한국어](README_KO.md) / [Русский](README_RU.md) / [Tiếng Việt](README_VI.md)
 
 [![Discord](https://img.shields.io/discord/1335141740050649118?logo=discord&labelColor=%20%235462eb&logoColor=%20%23f5f5f5&color=%20%235462eb)](https://discord.gg/wdNEHETs87)
 [![QQ Group](https://img.shields.io/badge/%E7%A4%BE%E5%8C%BAQQ%E7%BE%A4-966235608-blue)](https://qm.qq.com/q/JLi38whHum)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/langbot-app/LangBot)
 [![GitHub release (latest by date)](https://img.shields.io/github/v/release/langbot-app/LangBot)](https://github.com/langbot-app/LangBot/releases/latest)
 <img src="https://img.shields.io/badge/python-3.10 ~ 3.13 -blue.svg" alt="python">
+[![GitHub stars](https://img.shields.io/github/stars/langbot-app/LangBot?style=social)](https://github.com/langbot-app/LangBot/stargazers)
 [![star](https://gitcode.com/RockChinQ/LangBot/star/badge.svg)](https://gitcode.com/RockChinQ/LangBot)
 
-<a href="https://langbot.app">主頁</a> ｜
-<a href="https://docs.langbot.app/zh/insight/guide.html">部署文件</a> ｜
-<a href="https://docs.langbot.app/zh/plugin/plugin-intro.html">外掛介紹</a> ｜
-<a href="https://github.com/langbot-app/LangBot/issues/new?assignees=&labels=%E7%8B%AC%E7%AB%8B%E6%8F%92%E4%BB%B6&projects=&template=submit-plugin.yml&title=%5BPlugin%5D%3A+%E8%AF%B7%E6%B1%82%E7%99%BB%E8%AE%B0%E6%96%B0%E6%8F%92%E4%BB%B6">提交外掛</a>
+<a href="https://langbot.app">官網</a> ｜
+<a href="https://link.langbot.app/zh/docs/features">特性</a> ｜
+<a href="https://link.langbot.app/zh/docs/guide">文件</a> ｜
+<a href="https://link.langbot.app/zh/docs/api">API</a> ｜
+<a href="https://space.langbot.app">外掛市場</a> ｜
+<a href="https://langbot.featurebase.app/roadmap">路線圖</a>
 
 </div>
 
 </p>
 
-## 📦 開始使用
+---
 
-#### 快速部署
+## 什麼是 LangBot？
 
-使用 `uvx` 一鍵啟動（需要先安裝 [uv](https://docs.astral.sh/uv/getting-started/installation/) ）：
+LangBot 是一個**開源的生產級平台**，用於建構 AI 驅動的即時通訊機器人。它將大語言模型（LLM）連接到各種聊天平台，幫助你創建能夠對話、執行任務、並整合到現有工作流程中的智能 Agent。
 
-```bash
-uvx langbot
-```
+<p align="center">
+<img src="res/dashboard-overview.png" alt="LangBot Web 管理面板儀表板 — 即時監控訊息量、模型調用、成功率與活躍工作階段" width="720"/>
+</p>
 
-訪問 http://localhost:5300 即可開始使用。
+### 核心能力
 
-#### Docker Compose 部署
+- **AI 對話與 Agent** — 多輪對話、工具調用、多模態、流式輸出。自帶 RAG（知識庫），深度整合 [Dify](https://dify.ai)、[Coze](https://coze.com)、[n8n](https://n8n.io)、[Langflow](https://langflow.org)、 [Deerflow](https://deerflow.tech)、[Weknora](https://weknora.weixin.qq.com)等 LLMOps 平台。
+- **全平台支援** — 一套程式碼，覆蓋 QQ、微信、企業微信、飛書、釘釘、Discord、Telegram、Slack、LINE、KOOK 等平台。
+- **生產就緒** — 存取控制、限速、敏感詞過濾、全面監控與異常處理，已被多家企業採用。
+- **外掛生態** — 數百個外掛，事件驅動架構，組件擴展，適配 [MCP 協議](https://modelcontextprotocol.io/)。
+- **Web 管理面板** — 透過瀏覽器直觀地配置、管理和監控機器人，無需手動編輯設定檔。
+- **多流水線架構** — 不同機器人用於不同場景，具備全面的監控和異常處理能力。
 
-```bash
-git clone https://github.com/langbot-app/LangBot
-cd LangBot/docker
-docker compose up -d
-```
+[→ 了解更多功能特性](https://link.langbot.app/zh/docs/features)
 
-訪問 http://localhost:5300 即可開始使用。
+📍 實踐指南：[5 分鐘部署多平台 AI 機器人](https://blog.langbot.app/zh/blog/deploy-ai-bot-in-5-minutes/)、[將 DeepSeek 接入微信、企業微信與 Discord](https://blog.langbot.app/zh/blog/connect-deepseek-to-wechat/)、[讓 Dify Agent 跑在 Discord、Telegram 和 Slack 上](https://blog.langbot.app/zh/blog/dify-agent-discord-telegram-slack/)，以及[用 n8n 建構多平台 AI 聊天機器人](https://blog.langbot.app/zh/blog/n8n-multi-platform-ai-chatbot/)。
 
-詳細文件[Docker 部署](https://docs.langbot.app/zh/deploy/langbot/docker.html)。
-
-#### 寶塔面板部署
-
-已上架寶塔面板，若您已安裝寶塔面板，可以根據[文件](https://docs.langbot.app/zh/deploy/langbot/one-click/bt.html)使用。
-
-#### Zeabur 雲端部署
-
-社群貢獻的 Zeabur 模板。
-
-[![Deploy on Zeabur](https://zeabur.com/button.svg)](https://zeabur.com/zh-CN/templates/ZKTBDH)
-
-#### Railway 雲端部署
-
-[![Deploy on Railway](https://railway.com/button.svg)](https://railway.app/template/yRrAyL?referralCode=vogKPF)
-
-#### 手動部署
-
-直接使用發行版運行，查看文件[手動部署](https://docs.langbot.app/zh/deploy/langbot/manual.html)。
-
-#### Kubernetes 部署
-
-參考 [Kubernetes 部署](./docker/README_K8S.md) 文件。
+---
 
 ## 😎 保持更新
 
 點擊倉庫右上角 Star 和 Watch 按鈕，獲取最新動態。
 
-![star gif](https://docs.langbot.app/star.gif)
+![star gif](https://langbot.app/star.gif)
 
-## ✨ 特性
+## 快速開始
 
-<img width="500" src="https://docs.langbot.app/ui/bot-page-en-rounded.png" />
+### ☁️ LangBot Cloud（推薦）
 
+**[LangBot Cloud](https://space.langbot.app/cloud)** — 免部署，開箱即用。
 
-- 💬 大模型對話、Agent：支援多種大模型，適配群聊和私聊；具有多輪對話、工具調用、多模態、流式輸出能力，自帶 RAG（知識庫）實現，並深度適配 [Dify](https://dify.ai)、[Coze](https://coze.com)、[n8n](https://n8n.io) 等 LLMOps 平台。
-- 🤖 多平台支援：目前支援 QQ、QQ頻道、企業微信、個人微信、飛書、Discord、Telegram、KOOK、Slack、LINE 等平台。
-- 🛠️ 高穩定性、功能完備：原生支援訪問控制、限速、敏感詞過濾等機制；配置簡單，支援多種部署方式。支援多流水線配置，不同機器人用於不同應用場景。
-- 🧩 外掛擴展、活躍社群：高穩定性、高安全性的生產級外掛系統；支援事件驅動、組件擴展等外掛機制；適配 Anthropic [MCP 協議](https://modelcontextprotocol.io/)；目前已有數百個外掛。
-- 😻 Web 管理面板：支援通過瀏覽器管理 LangBot 實例，不再需要手動編寫配置文件。
+### 一鍵啟動
 
-詳細規格特性請訪問[文件](https://docs.langbot.app/zh/insight/features.html)。
+```bash
+uvx langbot
+```
 
-或訪問 demo 環境：https://demo.langbot.dev/  
-  - 登入資訊：郵箱：`demo@langbot.app` 密碼：`langbot123456`
-  - 注意：僅展示 WebUI 效果，公開環境，請不要在其中填入您的任何敏感資訊。
+> 需要安裝 [uv](https://docs.astral.sh/uv/getting-started/installation/)。訪問 http://localhost:5300 即可使用。
 
-### 訊息平台
+### Docker Compose
+
+```bash
+git clone https://github.com/langbot-app/LangBot
+cd LangBot/docker
+docker compose --profile all up -d
+```
+
+### 一鍵雲端部署
+
+[![Deploy on Zeabur](https://zeabur.com/button.svg)](https://zeabur.com/zh-CN/templates/ZKTBDH)
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.app/template/yRrAyL?referralCode=vogKPF)
+
+**更多方式：** [Docker](https://link.langbot.app/zh/docs/docker) · [手動部署](https://link.langbot.app/zh/docs/manual-deploy) · [寶塔面板](https://link.langbot.app/zh/docs/bt-panel) · [Kubernetes](https://docs.langbot.app/zh/deploy/langbot/kubernetes)
+
+---
+
+## 支援的平台
 
 | 平台 | 狀態 | 備註 |
-| --- | --- | --- |
-| Discord | ✅ |  |
-| Telegram | ✅ |  |
-| Slack | ✅ |  |
-| LINE | ✅ |  |
-| QQ 個人號 | ✅ | QQ 個人號私聊、群聊 |
-| QQ 官方機器人 | ✅ | QQ 官方機器人，支援頻道、私聊、群聊 |
-| 微信 | ✅ |  |
-| 企微對外客服 | ✅ |  |
-| 企微智能機器人 | ✅ |  |
-| 微信公眾號 | ✅ |  |
-| KOOK | ✅ |  |
-| Lark | ✅ |  |
-| DingTalk | ✅ |  |
+|------|------|------|
+| Discord | ✅ | 官方 |
+| Telegram | ✅ | 官方 |
+| Slack | ✅ | 官方 |
+| LINE | ✅ | 官方 |
+| QQ | ✅ | 個人號、官方機器人（頻道、私聊、群聊） |
+| 企業微信 | ✅ | 應用訊息、對外客服、智能機器人 |
+| 微信 | ✅ | 個人微信、微信公眾號 |
+| 飛書 | ✅ | 官方 |
+| 釘釘 | ✅ | 官方 |
+| KOOK | ✅ | 官方 |
+| Satori | ✅ |  |
+| Email | ✅ | 只 Matrix、Satori |
+| Matrix | ✅ | 支援多種橋接平台，如 Signal、WhatsApp、Messenger、iMessage、Mattermost、Google Chat、IRC、XMPP、Zulip 等 |
 
-### 大模型能力
+---
 
-| 模型 | 狀態 | 備註 |
-| --- | --- | --- |
-| [OpenAI](https://platform.openai.com/) | ✅ | 可接入任何 OpenAI 介面格式模型 |
-| [DeepSeek](https://www.deepseek.com/) | ✅ |  |
-| [Moonshot](https://www.moonshot.cn/) | ✅ |  |
-| [Anthropic](https://www.anthropic.com/) | ✅ |  |
-| [xAI](https://x.ai/) | ✅ |  |
-| [智譜AI](https://open.bigmodel.cn/) | ✅ |  |
-| [勝算雲](https://www.shengsuanyun.com/?from=CH_KYIPP758) | ✅ | 大模型和 GPU 資源平台 |
-| [優雲智算](https://www.compshare.cn/?ytag=GPU_YY-gh_langbot) | ✅ | 大模型和 GPU 資源平台 |
-| [PPIO](https://ppinfra.com/user/register?invited_by=QJKFYD&utm_source=github_langbot) | ✅ | 大模型和 GPU 資源平台 |
-| [接口 AI](https://jiekou.ai/) | ✅ | 大模型聚合平台，專注全球大模型接入 |
-| [302.AI](https://share.302.ai/SuTG99) | ✅ | 大模型聚合平台 |
-| [Google Gemini](https://aistudio.google.com/prompts/new_chat) | ✅ | |
-| [Dify](https://dify.ai) | ✅ | LLMOps 平台 |
-| [Ollama](https://ollama.com/) | ✅ | 本地大模型運行平台 |
-| [LMStudio](https://lmstudio.ai/) | ✅ | 本地大模型運行平台 |
-| [GiteeAI](https://ai.gitee.com/) | ✅ | 大模型介面聚合平台 |
-| [SiliconFlow](https://siliconflow.cn/) | ✅ | 大模型聚合平台 |
-| [阿里雲百煉](https://bailian.console.aliyun.com/) | ✅ | 大模型聚合平台, LLMOps 平台 |
-| [火山方舟](https://console.volcengine.com/ark/region:ark+cn-beijing/model?vendor=Bytedance&view=LIST_VIEW) | ✅ | 大模型聚合平台, LLMOps 平台 |
-| [ModelScope](https://modelscope.cn/docs/model-service/API-Inference/intro) | ✅ | 大模型聚合平台 |
-| [MCP](https://modelcontextprotocol.io/) | ✅ | 支援通過 MCP 協議獲取工具 |
+## 支援的大模型與整合
 
-### TTS
+| 提供商 | 類型 | 狀態 |
+|--------|------|------|
+| [OpenAI](https://platform.openai.com/) | LLM | ✅ |
+| [Anthropic](https://www.anthropic.com/) | LLM | ✅ |
+| [DeepSeek](https://www.deepseek.com/) | LLM | ✅ |
+| [Google Gemini](https://aistudio.google.com/prompts/new_chat) | LLM | ✅ |
+| [xAI](https://x.ai/) | LLM | ✅ |
+| [Moonshot](https://www.moonshot.cn/) | LLM | ✅ |
+| [智譜AI](https://open.bigmodel.cn/) | LLM | ✅ |
+| [Ollama](https://ollama.com/) | 本地 LLM | ✅ |
+| [LM Studio](https://lmstudio.ai/) | 本地 LLM | ✅ |
+| [Dify](https://dify.ai) | LLMOps | ✅ |
+| [MCP](https://modelcontextprotocol.io/) | 協議 | ✅ |
+| [SiliconFlow](https://siliconflow.cn/) | 聚合平台 | ✅ |
+| [阿里雲百煉](https://bailian.console.aliyun.com/) | 聚合平台 | ✅ |
+| [火山方舟](https://console.volcengine.com/ark/region:ark+cn-beijing/model?vendor=Bytedance&view=LIST_VIEW) | 聚合平台 | ✅ |
+| [ModelScope](https://modelscope.cn/docs/model-service/API-Inference/intro) | 聚合平台 | ✅ |
+| [GiteeAI](https://ai.gitee.com/) | 聚合平台 | ✅ |
+| [勝算雲](https://www.shengsuanyun.com/?from=CH_KYIPP758) | GPU 平台 | ✅ |
+| [優雲智算](https://www.compshare.cn/?ytag=GPU_YY-gh_langbot) | GPU 平台 | ✅ |
+| [PPIO](https://ppinfra.com/user/register?invited_by=QJKFYD&utm_source=github_langbot) | GPU 平台 | ✅ |
+| [接口 AI](https://jiekou.ai/) | 聚合平台 | ✅ |
+| [302.AI](https://share.302ai.cn/SuTG99) | 聚合平台 | ✅ |
+| [Qiniu](https://www.qiniu.com/ai/agent) | 聚合平台 | ✅ |
+
+### TTS（語音合成）
 
 | 平台/模型 | 備註 |
-| --- | --- |
+|-----------|------|
 | [FishAudio](https://fish.audio/zh-CN/discovery/) | [外掛](https://github.com/the-lazy-me/NewChatVoice) |
 | [海豚 AI](https://www.ttson.cn/?source=thelazy) | [外掛](https://github.com/the-lazy-me/NewChatVoice) |
 | [AzureTTS](https://portal.azure.com/) | [外掛](https://github.com/Ingnaryk/LangBot_AzureTTS) |
@@ -149,13 +151,65 @@ docker compose up -d
 ### 文生圖
 
 | 平台/模型 | 備註 |
-| --- | --- |
-| 阿里雲百煉 | [外掛](https://github.com/Thetail001/LangBot_BailianTextToImagePlugin)
+|-----------|------|
+| 阿里雲百煉 | [外掛](https://github.com/Thetail001/LangBot_BailianTextToImagePlugin) |
 
-## 😘 社群貢獻
+[→ 查看完整整合列表](https://link.langbot.app/zh/docs/features)
 
-感謝以下[程式碼貢獻者](https://github.com/langbot-app/LangBot/graphs/contributors)和社群裡其他成員對 LangBot 的貢獻：
+---
+
+## 為什麼選擇 LangBot？
+
+| 使用場景 | LangBot 如何幫助 |
+|----------|------------------|
+| **客戶服務** | 將 AI Agent 部署到微信/企微/釘釘/飛書，基於知識庫自動回答使用者問題 |
+| **內部工具** | 將 n8n/Dify 工作流接入企微/釘釘，實現業務流程自動化 |
+| **社群運營** | 在 QQ/Discord 群中使用 AI 驅動的內容審核與智能互動 |
+| **多平台觸達** | 一個機器人，覆蓋所有平台。透過統一面板集中管理 |
+
+---
+
+## 線上演示
+
+**立即體驗：** https://demo.langbot.dev/
+- 信箱：`demo@langbot.app`
+- 密碼：`langbot123456`
+
+*注意：公開演示環境，請不要在其中填入任何敏感資訊。*
+
+## 為 AI Agent 而生 🤖
+
+LangBot **從設計上就對 Agent 友善** —— 你的編碼 Agent（Claude Code、Codex、Copilot、Cursor 等）可以一等公民般地操作、擴充和部署 LangBot：
+
+- **MCP Server** —— LangBot 內建 [Model Context Protocol](https://modelcontextprotocol.io/) 端點 `/mcp`，與 HTTP API 對齊，Agent 可程式化管理機器人、流水線、外掛和模型。使用同一套 API Key 鑑權（可在 `config.yaml` 設定全域 Key，或使用使用者 Key），無需登入流程。在 Web 面板的 **API 與 MCP** 分頁中設定。
+- **倉庫內 Skills** —— [`skills/`](skills/) 目錄是使用 LangBot 的**唯一事實來源**：外掛開發、核心開發、端到端測試、部署，以及操作 LangBot / LangBot Space MCP Server。把 Agent 指向這個目錄，它就知道如何動手。
+- **AGENTS.md** —— 每個倉庫都提供 [`AGENTS.md`](AGENTS.md)（軟連結到 `CLAUDE.md`），描述架構、規範，以及「API 變更必須同步更新 MCP Server 和 skills」的約定。
+- **`llms.txt`** —— 面向 LLM 的機器可讀專案上下文已發布在官網。
+
+> **雲端 / 市集：** [LangBot Space](https://space.langbot.app) 同樣開放 MCP Server，Agent 可搜尋和檢視外掛 / MCP / Skill 市集，使用 Personal Access Token 鑑權。
+
+---
+
+## 社群
+
+[![Discord](https://img.shields.io/discord/1335141740050649118?logo=discord&label=Discord)](https://discord.gg/wdNEHETs87)
+[![QQ Group](https://img.shields.io/badge/%E7%A4%BE%E5%8C%BAQQ%E7%BE%A4-966235608-blue)](https://qm.qq.com/q/JLi38whHum)
+
+- [Discord 社群](https://discord.gg/wdNEHETs87)
+- [QQ 社群群](https://qm.qq.com/q/JLi38whHum)
+
+---
+
+## Star 趨勢
+
+[![Star History Chart](https://api.star-history.com/svg?repos=langbot-app/LangBot&type=Date)](https://star-history.com/#langbot-app/LangBot&Date)
+
+---
+
+## 貢獻者
+
+感謝所有[貢獻者](https://github.com/langbot-app/LangBot/graphs/contributors)對 LangBot 的幫助：
 
 <a href="https://github.com/langbot-app/LangBot/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=langbot-app/LangBot" />
-</a> 
+</a>
